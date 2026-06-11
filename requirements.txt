@@ -1,0 +1,12 @@
+# Core (always required)
+httpx>=0.25.0
+selectolax>=0.3.17
+
+# Dynamic fetcher (optional)
+# playwright>=1.40.0
+
+# Development
+# pytest>=7.0
+# pytest-asyncio>=0.21
+# pytest-cov>=4.0
+# ruff>=0.1.0
