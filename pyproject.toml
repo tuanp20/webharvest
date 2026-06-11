@@ -4,15 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "webharvest"
-version = "1.0.0"
-description = "Async web scraper and image downloader with auto-fetcher selection"
+version = "1.1.0"
+description = "Async web scraper and image downloader — desktop & CLI"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"
 authors = [
     {name = "WebHarvest Contributors"},
 ]
-keywords = ["web-scraping", "image-downloader", "crawler", "async", "playwright"]
+keywords = ["web-scraping", "image-downloader", "crawler", "async", "desktop"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
@@ -29,6 +29,10 @@ classifiers = [
 dependencies = [
     "httpx>=0.25.0",
     "selectolax>=0.3.17",
+    "curl_cffi>=0.9",
+    "fastapi>=0.100.0",
+    "uvicorn[standard]>=0.20.0",
+    "pywebview>=5.0",
 ]
 
 [project.optional-dependencies]
@@ -39,16 +43,17 @@ dev = [
     "pytest-asyncio>=0.21",
     "pytest-cov>=4.0",
     "ruff>=0.1.0",
+    "pyinstaller>=6.0",
 ]
 
 [project.scripts]
 webharvest = "webharvest.cli:main"
+webharvest-desktop = "main_desktop:main"
 
 [project.urls]
-Homepage = "https://github.com/webharvest/webharvest"
-Documentation = "https://github.com/webharvest/webharvest#readme"
-Repository = "https://github.com/webharvest/webharvest"
-Issues = "https://github.com/webharvest/webharvest/issues"
+Homepage = "https://github.com/tuanp20/webharvest"
+Repository = "https://github.com/tuanp20/webharvest"
+Issues = "https://github.com/tuanp20/webharvest/issues"
 
 [tool.setuptools.packages.find]
 include = ["webharvest*"]

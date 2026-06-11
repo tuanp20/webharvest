@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import logging
+import sys
 from pathlib import Path
 from typing import Any, Dict, List
 from urllib.parse import urlparse
@@ -23,8 +24,20 @@ app = FastAPI(
     version="1.0.0",
 )
 
-static_dir = Path(__file__).parent / "static"
+# PyInstaller compatibility: resolve static dir from bundle or source
+if getattr(sys, "frozen", False):
+    _base = Path(sys._MEIPASS)
+else:
+    _base = Path(__file__).parent
+
+static_dir = _base / "webharvest" / "static" if getattr(sys, "frozen", False) else _base / "static"
 static_dir.mkdir(parents=True, exist_ok=True)
+
+# Health check for desktop app readiness probe
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "version": "1.0.0"}
+
 
 # Serve index.html at root
 @app.get("/", response_class=HTMLResponse)

@@ -1,12 +1,12 @@
-# Core (always required)
+# Core
 httpx>=0.25.0
 selectolax>=0.3.17
+curl_cffi>=0.9
+fastapi>=0.100.0
+uvicorn[standard]>=0.20.0
 
-# Dynamic fetcher (optional)
-# playwright>=1.40.0
+# Desktop UI
+pywebview>=5.0
 
-# Development
-# pytest>=7.0
-# pytest-asyncio>=0.21
-# pytest-cov>=4.0
-# ruff>=0.1.0
+# Build (optional — for creating .exe)
+# pyinstaller>=6.0

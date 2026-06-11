@@ -34,9 +34,12 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# Output
+# Output / downloaded images
 output/
 downloads/
+etsy_*/
+etsy_test_*/
+wikipedia_images/
 
 # Playwright
 playwright-report/
@@ -45,3 +48,7 @@ test_gallery/
 test_stealth/
 test_wiki/
 debug_*.py
+
+# PyInstaller
+*.spec
+WebHarvest.spec
