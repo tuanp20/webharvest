@@ -125,6 +125,14 @@ async def ws_crawl(websocket: WebSocket):
             fetcher = FetcherType(fetcher_str.lower())
         except ValueError:
             fetcher = FetcherType.AUTO
+
+        # Smart auto-detect: force stealth for sites known to use anti-bot
+        _STEALTH_DOMAINS = ["etsy.com", "pinterest.com", "instagram.com", "tiktok.com"]
+        from urllib.parse import urlparse as _urlparse
+        _domain = _urlparse(url).netloc.lower()
+        if fetcher == FetcherType.AUTO and any(d in _domain for d in _STEALTH_DOMAINS):
+            logger.info("Auto-detected anti-bot site (%s), forcing stealth fetcher", _domain)
+            fetcher = FetcherType.STEALTH
             
         # Build CrawlConfig
         config = CrawlConfig(
@@ -141,6 +149,22 @@ async def ws_crawl(websocket: WebSocket):
         
         # 2. Set up thread-safe event queue for the websocket stream
         queue = asyncio.Queue()
+
+        # Map backend event names → frontend event names
+        _EVENT_MAP = {
+            "crawl_start": "crawl_started",
+            "page_fetch": "page_started",
+            "page_parsed": "page_fetched",
+            "antibot_detected": "antibot_detected",
+            "js_detected": "js_detected",
+            "upgrade_failed": "upgrade_failed",
+            "download_start": "download_start",
+            "image_downloaded": "image_downloaded",
+            "download_done": "download_done",
+            "crawl_done": "crawl_done",
+            "gallery_empty": "gallery_empty",
+            "next_page": "next_page",
+        }
         
         def on_progress(event: str, event_data: Dict[str, Any]):
             # Place event in queue to be consumed asynchronously
@@ -148,11 +172,23 @@ async def ws_crawl(websocket: WebSocket):
             
         # Background task to fetch from the queue and send to WebSocket
         async def event_sender():
+            pages_visited = 0
+            images_found = 0
             while True:
                 event, edata = await queue.get()
                 if event is None:
                     queue.task_done()
                     break
+
+                # Translate event name for frontend
+                fe_event = _EVENT_MAP.get(event, event)
+
+                # Enrich page_fetched with running stats
+                if event == "page_parsed":
+                    pages_visited += 1
+                    images_found += edata.get("images", 0)
+                    edata["pages_visited"] = pages_visited
+                    edata["images_found"] = images_found
                     
                 # Format CrawlResult for JSON serialization
                 if event == "crawl_done" and "result" in edata:
@@ -172,7 +208,7 @@ async def ws_crawl(websocket: WebSocket):
                     }
                     
                 try:
-                    await websocket.send_json({"event": event, "data": edata})
+                    await websocket.send_json({"event": fe_event, "data": edata})
                 except Exception:
                     # Connection closed or error sending
                     break
