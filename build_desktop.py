@@ -62,7 +62,10 @@ def build(onefile: bool = False) -> None:
             shutil.rmtree(d)
 
     # --- Collect hidden imports ---
+    # PyInstaller misses many dynamically-imported packages.
+    # This list was verified by auditing dist/_internal after build.
     hidden_imports = [
+        # --- WebHarvest core ---
         "webharvest",
         "webharvest.server",
         "webharvest.config",
@@ -73,6 +76,7 @@ def build(onefile: bool = False) -> None:
         "webharvest.downloader",
         "webharvest.extractors",
         "webharvest.cli",
+        # --- Uvicorn ---
         "uvicorn",
         "uvicorn.logging",
         "uvicorn.loops",
@@ -85,6 +89,7 @@ def build(onefile: bool = False) -> None:
         "uvicorn.lifespan",
         "uvicorn.lifespan.on",
         "uvicorn.lifespan.off",
+        # --- FastAPI / Starlette ---
         "fastapi",
         "starlette",
         "starlette.routing",
@@ -92,14 +97,67 @@ def build(onefile: bool = False) -> None:
         "starlette.responses",
         "starlette.staticfiles",
         "starlette.websockets",
+        # --- HTTP clients (critical for crawling!) ---
         "httpx",
-        "selectolax",
-        "selectolax.parser",
+        "httpx._transports",
+        "httpx._transports.default",
+        "httpcore",
+        "httpcore._async",
+        "httpcore._sync",
+        "httpcore._backends",
+        "httpcore._backends.auto",
+        "httpcore._backends.anyio",
+        "h11",
+        "h2",
+        "hpack",
+        "hyperframe",
+        # --- Stealth fetcher ---
         "curl_cffi",
         "curl_cffi.requests",
+        "cffi",
+        "pycparser",
+        # --- HTML parser ---
+        "selectolax",
+        "selectolax.parser",
+        # --- Async frameworks ---
         "anyio",
         "anyio._backends",
         "anyio._backends._asyncio",
+        "sniffio",
+        # --- Network / encoding ---
+        "idna",
+        "charset_normalizer",
+        "certifi",
+        "socksio",
+        # --- Starlette extras ---
+        "wsproto",
+        "multipart",
+        # --- CLI / Utilities ---
+        "click",
+        "rich",
+        "rich.console",
+        "rich.progress",
+        "typing_extensions",
+    ]
+
+    # --- Collect-all: ensures ALL submodules + data files are bundled ---
+    collect_all_packages = [
+        "httpx",
+        "httpcore",
+        "curl_cffi",
+        "anyio",
+        "certifi",
+        "h11",
+        "sniffio",
+        "idna",
+        "charset_normalizer",
+        "click",
+        "rich",
+        "h2",
+        "hpack",
+        "hyperframe",
+        "wsproto",
+        "socksio",
     ]
 
     # --- Collect data files ---
@@ -134,6 +192,10 @@ def build(onefile: bool = False) -> None:
     # Hidden imports
     for hi in hidden_imports:
         cmd.extend(["--hidden-import", hi])
+
+    # Collect-all: bundle ALL submodules + data files for critical packages
+    for pkg in collect_all_packages:
+        cmd.extend(["--collect-all", pkg])
 
     # Data files
     sep = ";" if system == "Windows" else ":"
