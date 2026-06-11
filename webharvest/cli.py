@@ -32,37 +32,37 @@ class ProgressDisplay:
 
     def __call__(self, event: str, data: Dict[str, Any]):
         if event == "crawl_start":
-            print(f"🔍 Starting crawl: {data['url']} (fetcher: {data['fetcher']})")
+            print(f"[CRAWL] Starting crawl: {data['url']} (fetcher: {data['fetcher']})")
 
         elif event == "page_fetch":
             if self.verbose:
-                print(f"  📄 Fetching: {data['url']}")
+                print(f"  [FETCH] Fetching: {data['url']}")
 
         elif event == "page_parsed":
             if self.verbose:
-                print(f"  ✅ Parsed: {data['url']} — {data['images']} images, {data['links']} links")
+                print(f"  [OK] Parsed: {data['url']} — {data['images']} images, {data['links']} links")
 
         elif event == "js_detected":
-            print(f"  ⚡ JS content detected, upgrading to dynamic fetcher")
+            print(f"  [JS] JS content detected, upgrading to dynamic fetcher")
 
         elif event == "antibot_detected":
-            print(f"  🛡️  Anti-bot detected, upgrading to stealth fetcher")
+            print(f"  [STEALTH] Anti-bot detected, upgrading to stealth fetcher")
 
         elif event == "next_page":
-            print(f"  ➡️  Following pagination: {data['url']}")
+            print(f"  [PAGINATION] Following pagination: {data['url']}")
 
         elif event == "gallery_empty":
-            print(f"  ℹ️  No more images found, stopping pagination")
+            print(f"  [INFO] No more images found, stopping pagination")
 
         elif event == "download_start":
-            print(f"⬇️  Downloading {data['count']} images...")
+            print(f"[DOWNLOAD] Downloading {data['count']} images...")
 
         elif event == "image_downloaded":
             size_kb = data['size'] / 1024
-            print(f"  ✓ {data['progress']} — {size_kb:.1f} KB — {data['url'][:80]}")
+            print(f"  [+] {data['progress']} — {size_kb:.1f} KB — {data['url'][:80]}")
 
         elif event == "download_done":
-            print(f"\n🎉 Done! Downloaded: {data['downloaded']}, Failed: {data['failed']}")
+            print(f"\n[DONE] Downloaded: {data['downloaded']}, Failed: {data['failed']}")
 
         elif event == "crawl_done":
             r = data["result"]
@@ -139,6 +139,14 @@ def cmd_gallery(args: argparse.Namespace):
     return 0 if result.images_failed == 0 else 1
 
 
+def cmd_server(args: argparse.Namespace):
+    """Handle `webharvest server`."""
+    import uvicorn
+    print(f"[SERVER] Starting WebHarvest Web UI at http://{args.host}:{args.port}")
+    uvicorn.run("webharvest.server:app", host=args.host, port=args.port, log_level="info")
+    return 0
+
+
 # ---------------------------------------------------------------------------
 # Argument parser
 # ---------------------------------------------------------------------------
@@ -181,6 +189,7 @@ examples:
   webharvest crawl https://blog.example.com --depth 3 --max-pages 50
   webharvest gallery https://imgur.com/a/abc123 --concurrent 10
   webharvest download https://example.com --stealth -f png,webp
+  webharvest server --port 8000
         """,
     )
     parser.add_argument("--version", action="version", version=f"webharvest {__version__}")
@@ -204,6 +213,12 @@ examples:
                        help="CSS selector for next-page link")
     p_gal.set_defaults(func=cmd_gallery)
 
+    # server
+    p_srv = sub.add_parser("server", help="Start the Web UI server")
+    p_srv.add_argument("--host", default="127.0.0.1", help="Host to bind to (default: 127.0.0.1)")
+    p_srv.add_argument("--port", type=int, default=8000, help="Port to bind to (default: 8000)")
+    p_srv.set_defaults(func=cmd_server)
+
     return parser
 
 
@@ -221,7 +236,7 @@ def main(argv=None):
         return 0
 
     # Configure logging
-    level = logging.DEBUG if args.verbose else logging.WARNING
+    level = logging.DEBUG if getattr(args, "verbose", False) else logging.WARNING
     logging.basicConfig(
         level=level,
         format="%(levelname)s %(name)s: %(message)s",
@@ -230,11 +245,11 @@ def main(argv=None):
     try:
         return args.func(args)
     except KeyboardInterrupt:
-        print("\n⛔ Interrupted.")
+        print("\n[INFO] Interrupted.")
         return 130
     except Exception as exc:
-        print(f"❌ Error: {exc}", file=sys.stderr)
-        if args.verbose:
+        print(f"[ERROR] Error: {exc}", file=sys.stderr)
+        if getattr(args, "verbose", False):
             import traceback
             traceback.print_exc()
         return 1

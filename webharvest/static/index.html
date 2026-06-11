@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebHarvest - Advanced Web Scraper & Image Downloader</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
+    <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+    <div class="glow-bg">
+        <div class="ball ball-1"></div>
+        <div class="ball ball-2"></div>
+        <div class="ball ball-3"></div>
+    </div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-area">
+                <div class="logo-icon">
+                    <i data-lucide="sprout"></i>
+                </div>
+                <div>
+                    <h1>WebHarvest</h1>
+                    <p class="tagline">Trình cào và tải ảnh tự động nâng cao</p>
+                </div>
+            </div>
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="scraper">
+                    <i data-lucide="terminal"></i> Bộ cào dữ liệu
+                </button>
+                <button class="tab-btn" data-tab="gallery" id="btn-gallery-tab">
+                    <i data-lucide="image"></i> Kho ảnh đã tải
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="app-main">
+            <!-- Scraper Tab -->
+            <section id="tab-scraper" class="tab-content active">
+                <div class="grid-layout">
+                    <!-- Left Column: Config -->
+                    <div class="card config-card glass">
+                        <div class="card-header">
+                            <i data-lucide="sliders"></i>
+                            <h2>Cấu hình cào dữ liệu</h2>
+                        </div>
+                        <form id="crawl-form" class="config-form">
+                            <div class="form-group">
+                                <label for="url">URL mục tiêu</label>
+                                <div class="input-with-icon">
+                                    <i data-lucide="link"></i>
+                                    <input type="url" id="url" required placeholder="https://example.com/gallery" value="https://www.wikipedia.org/">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="output_dir">Thư mục lưu trữ</label>
+                                <div class="input-with-icon">
+                                    <i data-lucide="folder"></i>
+                                    <input type="text" id="output_dir" required placeholder="./output" value="./output">
+                                </div>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="depth">Độ sâu thu thập</label>
+                                    <select id="depth">
+                                        <option value="0" selected>Trang hiện tại (Depth 0)</option>
+                                        <option value="1">Liên kết trực tiếp (Depth 1)</option>
+                                        <option value="2">2 tầng liên kết (Depth 2)</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="max_pages">Số trang tối đa</label>
+                                    <input type="number" id="max_pages" min="1" max="1000" value="20">
+                                </div>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="fetcher">Bộ tải trang (Fetcher)</label>
+                                    <select id="fetcher">
+                                        <option value="auto" selected>Tự động phát hiện (Auto)</option>
+                                        <option value="static">Tĩnh (Static - Nhanh)</option>
+                                        <option value="dynamic">Động (Playwright - JS)</option>
+                                        <option value="stealth">Stealth (Chống chặn)</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="min_file_size">Kích thước tối thiểu (KB)</label>
+                                    <input type="number" id="min_file_size" min="0" value="10">
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Định dạng ảnh cho phép</label>
+                                <div class="checkbox-group">
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" name="format" value="jpg" checked>
+                                        <span class="checkmark">JPG</span>
+                                    </label>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" name="format" value="jpeg" checked>
+                                        <span class="checkmark">JPEG</span>
+                                    </label>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" name="format" value="png" checked>
+                                        <span class="checkmark">PNG</span>
+                                    </label>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" name="format" value="webp" checked>
+                                        <span class="checkmark">WEBP</span>
+                                    </label>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" name="format" value="gif" checked>
+                                        <span class="checkmark">GIF</span>
+                                    </label>
+                                    <label class="checkbox-container">
+                                        <input type="checkbox" name="format" value="svg">
+                                        <span class="checkmark">SVG</span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="action-buttons">
+                                <button type="submit" id="btn-start" class="btn btn-primary btn-glow">
+                                    <i data-lucide="play"></i> Bắt đầu Crawl
+                                </button>
+                                <button type="button" id="btn-stop" class="btn btn-danger" disabled>
+                                    <i data-lucide="square"></i> Dừng
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Right Column: Status & Realtime Logs -->
+                    <div class="right-column">
+                        <!-- Stats Grid -->
+                        <div class="stats-grid">
+                            <div class="stat-card glass">
+                                <div class="stat-icon icon-blue">
+                                    <i data-lucide="chrome"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-label">Đã duyệt trang</span>
+                                    <span class="stat-value" id="stat-pages">0</span>
+                                </div>
+                            </div>
+                            <div class="stat-card glass">
+                                <div class="stat-icon icon-yellow">
+                                    <i data-lucide="search"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-label">Tìm thấy ảnh</span>
+                                    <span class="stat-value" id="stat-found">0</span>
+                                </div>
+                            </div>
+                            <div class="stat-card glass">
+                                <div class="stat-icon icon-green">
+                                    <i data-lucide="download-cloud"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-label">Đã tải về</span>
+                                    <span class="stat-value" id="stat-downloaded">0</span>
+                                </div>
+                            </div>
+                            <div class="stat-card glass">
+                                <div class="stat-icon icon-red">
+                                    <i data-lucide="alert-triangle"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-label">Lỗi/Bỏ qua</span>
+                                    <span class="stat-value" id="stat-failed">0</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Realtime Logs -->
+                        <div class="card logs-card glass">
+                            <div class="card-header">
+                                <div class="title-with-badge">
+                                    <i data-lucide="activity"></i>
+                                    <h2>Trạng thái thời gian thực</h2>
+                                </div>
+                                <div id="status-badge" class="badge badge-inactive">Đang dừng</div>
+                            </div>
+                            <div class="logs-container" id="logs-viewer">
+                                <div class="log-line system">Sẵn sàng thu thập dữ liệu. Nhấn "Bắt đầu Crawl" để chạy...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Stream Gallery -->
+                <div class="card gallery-card glass">
+                    <div class="card-header">
+                        <i data-lucide="images"></i>
+                        <h2>Ảnh đang tải trực tiếp</h2>
+                        <span class="counter" id="live-gallery-count">0 ảnh</span>
+                    </div>
+                    <div class="image-grid" id="live-image-grid">
+                        <div class="placeholder-text">Ảnh được tải xuống sẽ xuất hiện tại đây theo thời gian thực...</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Gallery / History Tab -->
+            <section id="tab-gallery" class="tab-content">
+                <div class="gallery-controls-card card glass">
+                    <div class="gallery-filters">
+                        <div class="form-group flex-grow">
+                            <label for="history-output-dir">Xem ảnh từ thư mục:</label>
+                            <div class="input-with-button">
+                                <input type="text" id="history-output-dir" value="./output" placeholder="./output">
+                                <button type="button" id="btn-refresh-history" class="btn btn-secondary">
+                                    <i data-lucide="refresh-cw"></i> Quét thư mục
+                                </button>
+                            </div>
+                        </div>
+                        <div class="form-group filter-input-group">
+                            <label for="search-domain">Lọc theo Tên miền / Hostname:</label>
+                            <div class="input-with-icon">
+                                <i data-lucide="filter"></i>
+                                <input type="text" id="search-domain" placeholder="Tất cả tên miền...">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card glass history-gallery-container">
+                    <div class="card-header">
+                        <i data-lucide="archive"></i>
+                        <h2>Danh sách ảnh trong thư mục lưu trữ</h2>
+                        <span class="counter" id="history-gallery-count">0 ảnh</span>
+                    </div>
+                    <div class="image-grid" id="history-image-grid">
+                        <!-- Loaded via API -->
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Image Modal Viewer -->
+    <div id="image-modal" class="modal">
+        <span class="close-modal">&times;</span>
+        <img class="modal-content" id="modal-img">
+        <div id="modal-caption" class="modal-caption"></div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

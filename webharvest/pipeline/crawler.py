@@ -255,58 +255,117 @@ class DynamicFetcher(BaseFetcher):
 
 
 class StealthFetcher(BaseFetcher):
-    """Stealth Playwright fetcher for anti-bot sites.
+    """Stealth fetcher using curl_cffi TLS impersonation to bypass anti-bot.
 
-    Falls back through DynamicFetcher → StaticFetcher chain.
+    Strategy:
+      1. Try curl_cffi with multiple real-browser TLS fingerprints in priority
+         order (Safari profiles work best against DataDome/Cloudflare).
+      2. Each target is tried independently — if one gets a challenge page,
+         the next target is attempted.
+      3. Final fallback: StaticFetcher (Playwright is skipped on Windows
+         because asyncio subprocess_exec fails inside uvicorn's event loop).
     """
 
     name = "stealth"
 
+    # Ordered by bypass success rate (safari first, then chrome, then edge)
+    _IMPERSONATE_TARGETS = [
+        "safari17_0", "safari15_5",
+        "chrome124", "chrome120", "chrome116",
+        "edge101",
+    ]
+
+    # Indicators that the response is a bot-challenge page
+    _CHALLENGE_INDICATORS = [
+        "captcha-delivery.com", "geo.captcha-delivery.com",
+        "challenges.cloudflare.com", "cf-browser-verification",
+        "just a moment", "cf_chl_opt", "datadome",
+        "perimeterx", "px-captcha",
+    ]
+
     def __init__(self):
-        self._dynamic = DynamicFetcher()
+        self._static_fallback = StaticFetcher()
+
+    def _is_challenge_page(self, html: str) -> bool:
+        """Detect if the response is a bot-challenge / captcha page."""
+        if not html or len(html.strip()) < 500:
+            lower = (html or "").lower()
+            return any(ind in lower for ind in self._CHALLENGE_INDICATORS)
+        lower = html[:5000].lower()
+        return any(ind in lower for ind in self._CHALLENGE_INDICATORS)
+
+    async def _fetch_with_target(self, url: str, config: CrawlConfig, target: str) -> Tuple[str, int]:
+        """Fetch using curl_cffi with a specific TLS impersonation target."""
+        try:
+            from curl_cffi import requests as curl_requests
+        except ImportError:
+            logger.warning("curl_cffi not installed — cannot use TLS impersonation")
+            return "", 0
+
+        # Don't override User-Agent when using impersonation — curl_cffi sets its own
+        headers = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Sec-Fetch-Dest": "document",
+            "Sec-Fetch-Mode": "navigate",
+            "Sec-Fetch-Site": "none",
+            "Sec-Fetch-User": "?1",
+            "Cache-Control": "max-age=0",
+        }
+
+        # Run synchronous curl_cffi in a thread to avoid blocking the event loop
+        def _sync_fetch():
+            import traceback
+            try:
+                logger.warning("[curl_cffi] Attempting %s with target=%s", url, target)
+                resp = curl_requests.get(
+                    url,
+                    headers=headers,
+                    impersonate=target,
+                    timeout=config.timeout,
+                    allow_redirects=True,
+                    verify=config.verify_ssl,
+                    proxies={"https": config.proxy, "http": config.proxy} if config.proxy else None,
+                )
+                logger.warning("[curl_cffi] %s → status=%d, len=%d", target, resp.status_code, len(resp.text))
+                return resp.text, resp.status_code
+            except Exception as exc:
+                logger.warning("[curl_cffi] %s EXCEPTION for %s: %s\n%s", target, url, exc, traceback.format_exc())
+                return "", 0
+
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, _sync_fetch)
 
     async def fetch(self, url: str, config: CrawlConfig) -> Tuple[str, int]:
-        try:
-            from playwright.async_api import async_playwright
-        except ImportError:
-            return await self._dynamic.fetch(url, config)
+        logger.warning("StealthFetcher: starting multi-target TLS bypass for %s", url)
+        # Try each impersonation target in priority order
+        for target in self._IMPERSONATE_TARGETS:
+            logger.warning("StealthFetcher: trying curl_cffi [%s] for %s", target, url)
+            html, status = await self._fetch_with_target(url, config, target)
 
-        try:
-            from playwright.async_api import async_playwright
-            async with async_playwright() as pw:
-                browser = await pw.chromium.launch(
-                    headless=True,
-                    args=[
-                        "--disable-blink-features=AutomationControlled",
-                        "--disable-dev-shm-usage",
-                        "--no-sandbox",
-                    ],
+            if html and status and 200 <= status < 400 and not self._is_challenge_page(html):
+                logger.warning(
+                    "StealthFetcher: curl_cffi [%s] SUCCEEDED (status=%d, len=%d)",
+                    target, status, len(html),
                 )
-                ctx = await browser.new_context(
-                    user_agent=config.user_agent,
-                    viewport={"width": 1920, "height": 1080},
-                    locale="en-US",
-                    proxy={"server": config.proxy} if config.proxy else None,
-                )
-                # Stealth: remove webdriver property
-                await ctx.add_init_script("""
-                    Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
-                    Object.defineProperty(navigator, 'plugins', {get: () => [1, 2, 3]});
-                    Object.defineProperty(navigator, 'languages', {get: () => ['en-US', 'en']});
-                    window.chrome = {runtime: {}};
-                """)
-                page = await ctx.new_page()
-                resp = await page.goto(url, wait_until="networkidle", timeout=int(config.timeout * 1000))
-                status = resp.status if resp else 0
-                html = await page.content()
-                await browser.close()
                 return html, status
-        except Exception as exc:
-            logger.warning("StealthFetcher failed for %s: %s — falling back", url, exc)
-            return await self._dynamic.fetch(url, config)
+
+            if html and self._is_challenge_page(html):
+                logger.warning("StealthFetcher: curl_cffi [%s] got challenge page (status=%d), trying next", target, status)
+            elif not html:
+                logger.warning("StealthFetcher: curl_cffi [%s] returned empty/error, trying next", target)
+            else:
+                logger.warning("StealthFetcher: curl_cffi [%s] got status %d, trying next", target, status)
+
+        # All curl_cffi targets exhausted — fall back to static fetcher
+        logger.warning("StealthFetcher: all TLS impersonation targets failed, falling back to static fetcher")
+        return await self._static_fallback.fetch(url, config)
 
     async def close(self):
-        await self._dynamic.close()
+        await self._static_fallback.close()
 
 
 # ---------------------------------------------------------------------------
