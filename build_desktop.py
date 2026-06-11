@@ -122,9 +122,9 @@ def build(onefile: bool = False) -> None:
     else:
         cmd.append("--onedir")
 
-    # Windowed mode (no console window) — except on Linux
-    if system != "Linux":
-        cmd.append("--windowed")
+    # Console mode — keep console visible for error debugging
+    # The app writes logs to WebHarvest.log and shows native error dialogs
+    cmd.append("--console")
 
     # Icon
     icon = _get_icon_path()
