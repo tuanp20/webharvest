@@ -220,6 +220,23 @@ def main() -> None:
         port = _find_free_port()
         logger.info("Selected port: %d", port)
 
+        # Create proxies.txt template if it doesn't exist
+        proxies_file = APP_DIR / "proxies.txt"
+        if not proxies_file.exists():
+            proxies_file.write_text(
+                "# WebHarvest - Danh sach proxy du phong\n"
+                "# Moi dong la 1 proxy URL, vi du:\n"
+                "#   http://user:pass@host:port\n"
+                "#   socks5://host:port\n"
+                "#   http://host:port\n"
+                "#\n"
+                "# WebHarvest se uu tien IP may local truoc.\n"
+                "# Neu bi chan, se tu dong thu cac proxy ben duoi.\n"
+                "#\n",
+                encoding="utf-8",
+            )
+            logger.info("Created proxies.txt template at %s", proxies_file)
+
         # 1. Start the embedded server
         _start_server(port)
 

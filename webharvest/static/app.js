@@ -1,8 +1,177 @@
 // Initialize Lucide Icons
 document.addEventListener("DOMContentLoaded", () => {
     lucide.createIcons();
-    loadHistory(); // Load initial history on startup
+    loadHistory();
+    initProxyPanel();
 });
+
+// ── DataImpulse Proxy Panel Logic ──────────────────────────────────
+function initProxyPanel() {
+    const providerSelect = document.getElementById("proxy-provider");
+    const diPanel = document.getElementById("di-panel");
+    const manualPanel = document.getElementById("manual-panel");
+
+    // Toggle panels based on provider selection
+    providerSelect.addEventListener("change", () => {
+        const val = providerSelect.value;
+        diPanel.style.display = val === "dataimpulse" ? "block" : "none";
+        manualPanel.style.display = val === "manual" ? "block" : "none";
+        syncProxyHiddenField();
+        lucide.createIcons(); // re-render icons in newly visible panels
+    });
+
+    // Password toggle
+    const btnEye = document.getElementById("btn-toggle-pass");
+    const passInput = document.getElementById("di-password");
+    if (btnEye && passInput) {
+        btnEye.addEventListener("click", () => {
+            const isPassword = passInput.type === "password";
+            passInput.type = isPassword ? "text" : "password";
+            // Swap icon
+            const icon = btnEye.querySelector("i");
+            if (icon) icon.setAttribute("data-lucide", isPassword ? "eye-off" : "eye");
+            lucide.createIcons();
+        });
+    }
+
+    // Test connection button
+    const btnTest = document.getElementById("btn-test-proxy");
+    if (btnTest) btnTest.addEventListener("click", testProxyConnection);
+
+    // Save settings button
+    const btnSave = document.getElementById("btn-save-proxy");
+    if (btnSave) btnSave.addEventListener("click", saveProxySettings);
+
+    // Load saved settings from backend
+    loadProxySettings();
+}
+
+function buildDataImpulseProxy() {
+    const user = (document.getElementById("di-username").value || "").trim();
+    const pass = (document.getElementById("di-password").value || "").trim();
+    const country = document.getElementById("di-country").value;
+    const session = document.getElementById("di-session").value;
+
+    if (!user || !pass) return "";
+
+    let params = [];
+    if (country) params.push(`cr.${country}`);
+    if (session !== "0") params.push(`sessttl.${session}`);
+
+    const login = params.length > 0 ? `${user}__${params.join(";")}` : user;
+    return `http://${login}:${pass}@gw.dataimpulse.com:823`;
+}
+
+function syncProxyHiddenField() {
+    const provider = document.getElementById("proxy-provider").value;
+    const hidden = document.getElementById("proxy");
+
+    if (provider === "dataimpulse") {
+        hidden.value = buildDataImpulseProxy();
+    } else if (provider === "manual") {
+        hidden.value = (document.getElementById("proxy-manual").value || "").trim();
+    } else {
+        hidden.value = "";
+    }
+}
+
+async function testProxyConnection() {
+    syncProxyHiddenField();
+    const proxyUrl = document.getElementById("proxy").value;
+    const resultEl = document.getElementById("proxy-test-result");
+    const btn = document.getElementById("btn-test-proxy");
+
+    if (!proxyUrl) {
+        resultEl.className = "proxy-test-result error";
+        resultEl.textContent = "⚠ Vui lòng nhập đầy đủ thông tin proxy";
+        return;
+    }
+
+    resultEl.className = "proxy-test-result loading";
+    resultEl.textContent = "⏳ Đang kiểm tra...";
+    btn.classList.add("testing");
+
+    try {
+        const resp = await fetch("/api/test-proxy", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ proxy: proxyUrl })
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            resultEl.className = "proxy-test-result success";
+            resultEl.textContent = `✓ Kết nối thành công — IP: ${data.ip}`;
+        } else {
+            resultEl.className = "proxy-test-result error";
+            resultEl.textContent = `✗ Lỗi: ${data.error}`;
+        }
+    } catch (e) {
+        resultEl.className = "proxy-test-result error";
+        resultEl.textContent = `✗ Không thể kết nối server`;
+    } finally {
+        btn.classList.remove("testing");
+    }
+}
+
+async function saveProxySettings() {
+    const provider = document.getElementById("proxy-provider").value;
+    const payload = {
+        provider,
+        di_username: (document.getElementById("di-username").value || "").trim(),
+        di_password: (document.getElementById("di-password").value || "").trim(),
+        di_country: document.getElementById("di-country").value,
+        di_session: document.getElementById("di-session").value,
+        manual_proxy: (document.getElementById("proxy-manual").value || "").trim(),
+    };
+
+    const resultEl = document.getElementById("proxy-test-result");
+    try {
+        const resp = await fetch("/api/proxy-settings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+        const data = await resp.json();
+        if (data.ok) {
+            resultEl.className = "proxy-test-result success";
+            resultEl.textContent = "✓ Đã lưu cài đặt thành công";
+            setTimeout(() => { resultEl.textContent = ""; resultEl.className = "proxy-test-result"; }, 3000);
+        } else {
+            resultEl.className = "proxy-test-result error";
+            resultEl.textContent = `✗ Lỗi lưu: ${data.error}`;
+        }
+    } catch (e) {
+        resultEl.className = "proxy-test-result error";
+        resultEl.textContent = "✗ Không thể kết nối server";
+    }
+}
+
+async function loadProxySettings() {
+    try {
+        const resp = await fetch("/api/proxy-settings");
+        const data = await resp.json();
+        if (data.ok && data.settings && Object.keys(data.settings).length > 0) {
+            const s = data.settings;
+            const providerSelect = document.getElementById("proxy-provider");
+            if (s.provider) providerSelect.value = s.provider;
+            if (s.di_username) document.getElementById("di-username").value = s.di_username;
+            if (s.di_password) document.getElementById("di-password").value = s.di_password;
+            if (s.di_country) document.getElementById("di-country").value = s.di_country;
+            if (s.di_session) document.getElementById("di-session").value = s.di_session;
+            if (s.manual_proxy) document.getElementById("proxy-manual").value = s.manual_proxy;
+
+            // Show relevant panel
+            const diPanel = document.getElementById("di-panel");
+            const manualPanel = document.getElementById("manual-panel");
+            diPanel.style.display = s.provider === "dataimpulse" ? "block" : "none";
+            manualPanel.style.display = s.provider === "manual" ? "block" : "none";
+            syncProxyHiddenField();
+            lucide.createIcons();
+        }
+    } catch (e) {
+        // Settings not available yet — ignore
+    }
+}
 
 // Tab Navigation
 const tabButtons = document.querySelectorAll(".tab-btn");
@@ -145,6 +314,9 @@ crawlForm.addEventListener("submit", (e) => {
     ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
+        // Compose proxy URL from current panel state before sending
+        syncProxyHiddenField();
+        const proxy = document.getElementById("proxy").value.trim();
         const payload = {
             url,
             output_dir,
@@ -152,7 +324,8 @@ crawlForm.addEventListener("submit", (e) => {
             max_pages,
             fetcher,
             min_file_size,
-            allowed_formats: formats
+            allowed_formats: formats,
+            proxy: proxy || null
         };
         ws.send(JSON.stringify(payload));
     };
@@ -227,6 +400,26 @@ crawlForm.addEventListener("submit", (e) => {
                 closeWebSocket();
                 break;
                 
+            case "proxy_fallback":
+                addLog(`⚠ IP local bị chặn — đang thử proxy dự phòng: ${data.proxy}`, "proxy");
+                updateProxyStatus("proxy", `Đang dùng proxy: ${data.proxy}`);
+                break;
+
+            case "proxy_success":
+                addLog(`✓ Proxy dự phòng hoạt động: ${data.proxy}`, "success");
+                updateProxyStatus("proxy", `Proxy đang hoạt động: ${data.proxy}`);
+                break;
+
+            case "local_ip_success":
+                addLog(`✓ IP máy local hoạt động tốt — không cần proxy`, "success");
+                updateProxyStatus("local", "IP máy local hoạt động tốt");
+                break;
+
+            case "all_proxies_failed":
+                addLog(`✗ Tất cả proxy đều thất bại: ${data.message}`, "error");
+                updateProxyStatus("error", "Tất cả proxy đều thất bại");
+                break;
+
             case "error":
                 addLog(`Lỗi hệ thống: ${data.message}`, "error");
                 closeWebSocket();
@@ -260,6 +453,23 @@ function closeWebSocket() {
     btnStop.disabled = true;
     statusBadge.textContent = "Đang dừng";
     statusBadge.className = "badge badge-inactive";
+}
+
+// Proxy Status Helper
+function updateProxyStatus(type, text) {
+    const dot = document.querySelector(".proxy-dot");
+    const statusText = document.getElementById("proxy-status-text");
+    if (!dot || !statusText) return;
+
+    dot.className = "proxy-dot";
+    if (type === "local") {
+        dot.classList.add("dot-local");
+    } else if (type === "proxy") {
+        dot.classList.add("dot-proxy");
+    } else {
+        dot.classList.add("dot-error");
+    }
+    statusText.textContent = text;
 }
 
 // History Gallery Logic

@@ -11,9 +11,13 @@ from urllib.parse import urlparse
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPException
 from fastapi.responses import HTMLResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 from webharvest.config import CrawlConfig, FetcherType
 from webharvest.pipeline.crawler import CrawlPipeline
+
+import httpx as _httpx
+import json as _json
 
 # Configure logging
 logger = logging.getLogger("webharvest.server")
@@ -33,10 +37,80 @@ else:
 static_dir = _base / "webharvest" / "static" if getattr(sys, "frozen", False) else _base / "static"
 static_dir.mkdir(parents=True, exist_ok=True)
 
+
+def _get_proxies_file_path() -> Path:
+    """Resolve path to proxies.txt next to the executable or project root."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent / "proxies.txt"
+    return Path(__file__).parent.parent / "proxies.txt"
+
+
+def _get_settings_path() -> Path:
+    """Resolve path to webharvest_settings.json next to the executable or project root."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).parent / "webharvest_settings.json"
+    return Path(__file__).parent.parent / "webharvest_settings.json"
+
+
 # Health check for desktop app readiness probe
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "version": "1.0.0"}
+
+
+# ── Proxy Settings (save/load DataImpulse credentials locally) ────────────
+class ProxySettings(BaseModel):
+    provider: str = "none"           # "none" | "dataimpulse" | "manual"
+    di_username: str = ""
+    di_password: str = ""
+    di_country: str = ""
+    di_session: str = "0"            # "0" = rotating, "10"/"30"/"60" = sticky
+    manual_proxy: str = ""
+
+
+@app.get("/api/proxy-settings")
+async def get_proxy_settings():
+    """Load saved proxy settings from local JSON file."""
+    path = _get_settings_path()
+    if path.exists():
+        try:
+            data = _json.loads(path.read_text(encoding="utf-8"))
+            proxy_cfg = data.get("proxy", {})
+            return {"ok": True, "settings": proxy_cfg}
+        except Exception as e:
+            logger.warning("Failed to read settings: %s", e)
+    return {"ok": True, "settings": {}}
+
+
+@app.post("/api/proxy-settings")
+async def save_proxy_settings(settings: ProxySettings):
+    """Save proxy settings to local JSON file."""
+    path = _get_settings_path()
+    try:
+        existing = {}
+        if path.exists():
+            existing = _json.loads(path.read_text(encoding="utf-8"))
+        existing["proxy"] = settings.model_dump()
+        path.write_text(_json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
+        return {"ok": True}
+    except Exception as e:
+        logger.error("Failed to save settings: %s", e)
+        return {"ok": False, "error": str(e)}
+
+
+@app.post("/api/test-proxy")
+async def test_proxy(data: dict):
+    """Test a proxy URL by making a request to httpbin.org/ip."""
+    proxy_url = data.get("proxy", "").strip()
+    if not proxy_url:
+        return {"ok": False, "error": "Proxy URL is empty"}
+    try:
+        async with _httpx.AsyncClient(proxy=proxy_url, timeout=15) as client:
+            resp = await client.get("https://httpbin.org/ip")
+            ip_info = resp.json().get("origin", "unknown")
+            return {"ok": True, "ip": ip_info, "status": resp.status_code}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 # Serve index.html at root
@@ -134,7 +208,29 @@ async def ws_crawl(websocket: WebSocket):
             logger.info("Auto-detected anti-bot site (%s), forcing stealth fetcher", _domain)
             fetcher = FetcherType.STEALTH
             
-        # Build CrawlConfig
+        # Parse proxy setting
+        proxy = data.get("proxy", None)
+        if proxy and isinstance(proxy, str):
+            proxy = proxy.strip() or None
+        else:
+            proxy = None
+
+        # Load backup proxies from proxies.txt next to app
+        backup_proxies: list[str] = []
+        if proxy:
+            backup_proxies.append(proxy)
+        _proxies_file = _get_proxies_file_path()
+        if _proxies_file and _proxies_file.exists():
+            try:
+                for line in _proxies_file.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and line not in backup_proxies:
+                        backup_proxies.append(line)
+            except Exception:
+                pass
+        logger.info("Backup proxies loaded: %d", len(backup_proxies))
+
+        # Build CrawlConfig  (proxy=None → use local IP first)
         config = CrawlConfig(
             url=url,
             output_dir=output_dir,
@@ -145,6 +241,7 @@ async def ws_crawl(websocket: WebSocket):
             allowed_formats=allowed_formats,
             create_dirs=True,
             overwrite=False,
+            proxy=None,  # Start with local IP
         )
         
         # 2. Set up thread-safe event queue for the websocket stream
@@ -164,6 +261,10 @@ async def ws_crawl(websocket: WebSocket):
             "crawl_done": "crawl_done",
             "gallery_empty": "gallery_empty",
             "next_page": "next_page",
+            "proxy_fallback": "proxy_fallback",
+            "proxy_success": "proxy_success",
+            "local_ip_success": "local_ip_success",
+            "all_proxies_failed": "all_proxies_failed",
         }
         
         def on_progress(event: str, event_data: Dict[str, Any]):
@@ -217,8 +318,8 @@ async def ws_crawl(websocket: WebSocket):
                     
         sender_task = asyncio.create_task(event_sender())
         
-        # 3. Instantiate and run pipeline
-        pipeline = CrawlPipeline(config, on_progress=on_progress)
+        # 3. Instantiate and run pipeline (with backup proxies for fallback)
+        pipeline = CrawlPipeline(config, on_progress=on_progress, backup_proxies=backup_proxies)
         try:
             await pipeline.run()
         except Exception as e:

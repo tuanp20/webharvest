@@ -1,0 +1,9 @@
+# WebHarvest - Danh sach proxy du phong
+# Moi dong la 1 proxy URL, vi du:
+#   http://user:pass@host:port
+#   socks5://host:port
+#   http://host:port
+#
+# WebHarvest se uu tien IP may local truoc.
+# Neu bi chan, se tu dong thu cac proxy ben duoi.
+#

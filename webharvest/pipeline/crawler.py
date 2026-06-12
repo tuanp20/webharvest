@@ -553,9 +553,11 @@ class CrawlPipeline:
         print(result.summary())
     """
 
-    def __init__(self, config: CrawlConfig, on_progress: Optional[ProgressCallback] = None):
+    def __init__(self, config: CrawlConfig, on_progress: Optional[ProgressCallback] = None, backup_proxies: Optional[List[str]] = None):
         self.config = config
         self.on_progress = on_progress or (lambda event, data: None)
+        self._backup_proxies: List[str] = backup_proxies or []
+        self._proxy_activated: bool = False  # True once we switched to a working proxy
 
         # Internal state
         self._fetcher: Optional[BaseFetcher] = None
@@ -695,9 +697,60 @@ class CrawlPipeline:
         return page
 
     async def _fetch_and_parse(self, url: str, result: CrawlResult) -> Optional[PageData]:
-        """Fetch one page, auto-upgrade fetcher if needed, parse content."""
+        """Fetch one page, auto-upgrade fetcher if needed, parse content.
+
+        Proxy fallback strategy:
+          1. First attempt uses current config.proxy (None = local IP).
+          2. If fetch fails or anti-bot is detected, iterate through
+             self._backup_proxies, re-create the fetcher with each proxy,
+             and retry.
+          3. On success, lock that proxy for the rest of the session.
+        """
         self._emit("page_fetch", {"url": url})
+
         html, status = await self._fetcher.fetch(url, self.config)
+        is_blocked = self._is_fetch_blocked(html, status)
+
+        # --- Proxy fallback (only if we haven't already activated a proxy) ---
+        if is_blocked and not self._proxy_activated and self._backup_proxies:
+            logger.warning("Local IP appears blocked for %s — starting proxy fallback", url)
+
+            for proxy_url in self._backup_proxies:
+                self._emit("proxy_fallback", {"proxy": proxy_url, "url": url})
+                logger.info("Trying backup proxy: %s", proxy_url)
+
+                # Swap proxy in config and rebuild the fetcher
+                old_proxy = self.config.proxy
+                self.config.proxy = proxy_url
+                try:
+                    await self._fetcher.close()
+                except Exception:
+                    pass
+                self._fetcher = _create_fetcher(self.config.fetcher)
+
+                retry_html, retry_status = await self._fetcher.fetch(url, self.config)
+                retry_blocked = self._is_fetch_blocked(retry_html, retry_status)
+
+                if not retry_blocked and retry_html:
+                    # This proxy works — keep it for the session
+                    html, status = retry_html, retry_status
+                    self._proxy_activated = True
+                    self._emit("proxy_success", {"proxy": proxy_url})
+                    logger.info("Proxy %s succeeded — locking for session", proxy_url)
+                    break
+                else:
+                    # This proxy also failed — restore and try next
+                    self.config.proxy = old_proxy
+                    logger.warning("Proxy %s also failed, trying next...", proxy_url)
+            else:
+                # All proxies exhausted
+                self._emit("all_proxies_failed", {
+                    "message": "Tất cả proxy đều thất bại — không thể truy cập trang",
+                    "url": url,
+                })
+        elif not is_blocked and not self._proxy_activated and self.config.proxy is None:
+            # Local IP worked on the first real page
+            self._emit("local_ip_success", {"url": url})
 
         if not html or status == 0:
             result.errors.append(f"Failed to fetch {url}")
@@ -758,6 +811,22 @@ class CrawlPipeline:
             "images": len(images), "links": len(links),
         })
         return page
+
+    def _is_fetch_blocked(self, html: str, status: int) -> bool:
+        """Determine if a fetch result indicates IP blocking or anti-bot."""
+        if not html or status == 0:
+            return True
+        if status in (403, 429, 503):
+            return True
+        if _detect_antibot(html):
+            return True
+        # Very short response that looks like a challenge
+        if len(html.strip()) < 500:
+            lower = html.lower()
+            challenge_words = ["captcha", "blocked", "denied", "forbidden", "rate limit"]
+            if any(w in lower for w in challenge_words):
+                return True
+        return False
 
     # ------------------------------------------------------------------
     # Image filtering

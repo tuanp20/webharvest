@@ -101,6 +101,99 @@
                             </div>
 
                             <div class="form-group">
+                                <label for="proxy-provider">Cấu hình Proxy</label>
+                                <select id="proxy-provider">
+                                    <option value="none">Không dùng proxy (IP máy local)</option>
+                                    <option value="dataimpulse">DataImpulse Residential Proxy</option>
+                                    <option value="manual">Proxy thủ công (nhập URL)</option>
+                                </select>
+                            </div>
+
+                            <!-- DataImpulse Config Panel -->
+                            <div id="di-panel" class="proxy-panel" style="display:none;">
+                                <div class="proxy-panel-header">
+                                    <i data-lucide="shield-check"></i>
+                                    <span>DataImpulse Configuration</span>
+                                </div>
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="di-username">Username</label>
+                                        <input type="text" id="di-username" placeholder="Tên đăng nhập DataImpulse">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="di-password">Password</label>
+                                        <div class="input-with-icon">
+                                            <i data-lucide="lock"></i>
+                                            <input type="password" id="di-password" placeholder="Mật khẩu">
+                                            <button type="button" class="btn-eye" id="btn-toggle-pass" title="Hiện/Ẩn mật khẩu">
+                                                <i data-lucide="eye"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="di-country">Quốc gia IP</label>
+                                        <select id="di-country">
+                                            <option value="">Bất kỳ (Random)</option>
+                                            <option value="us">🇺🇸 United States</option>
+                                            <option value="gb">🇬🇧 United Kingdom</option>
+                                            <option value="de">🇩🇪 Germany</option>
+                                            <option value="fr">🇫🇷 France</option>
+                                            <option value="jp">🇯🇵 Japan</option>
+                                            <option value="kr">🇰🇷 South Korea</option>
+                                            <option value="sg">🇸🇬 Singapore</option>
+                                            <option value="au">🇦🇺 Australia</option>
+                                            <option value="ca">🇨🇦 Canada</option>
+                                            <option value="br">🇧🇷 Brazil</option>
+                                            <option value="in">🇮🇳 India</option>
+                                            <option value="th">🇹🇭 Thailand</option>
+                                            <option value="id">🇮🇩 Indonesia</option>
+                                            <option value="ph">🇵🇭 Philippines</option>
+                                            <option value="vn">🇻🇳 Việt Nam</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="di-session">Kiểu xoay IP</label>
+                                        <select id="di-session">
+                                            <option value="0">Xoay mỗi request</option>
+                                            <option value="10">Giữ IP 10 phút</option>
+                                            <option value="30" selected>Giữ IP 30 phút</option>
+                                            <option value="60">Giữ IP 60 phút</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="proxy-actions">
+                                    <button type="button" id="btn-test-proxy" class="btn btn-outline-sm">
+                                        <i data-lucide="plug"></i> Kiểm tra kết nối
+                                    </button>
+                                    <button type="button" id="btn-save-proxy" class="btn btn-outline-sm">
+                                        <i data-lucide="save"></i> Lưu cài đặt
+                                    </button>
+                                    <span id="proxy-test-result" class="proxy-test-result"></span>
+                                </div>
+                            </div>
+
+                            <!-- Manual Proxy Panel -->
+                            <div id="manual-panel" class="proxy-panel" style="display:none;">
+                                <div class="form-group">
+                                    <label for="proxy-manual">Proxy URL</label>
+                                    <div class="input-with-icon">
+                                        <i data-lucide="shield"></i>
+                                        <input type="text" id="proxy-manual" placeholder="http://user:pass@host:port">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Hidden field that holds the final proxy URL for the crawl -->
+                            <input type="hidden" id="proxy" value="">
+
+                            <div id="proxy-status" class="proxy-status">
+                                <span class="proxy-dot dot-local"></span>
+                                <span id="proxy-status-text">Ưu tiên IP máy local — tự động chuyển proxy nếu bị chặn</span>
+                            </div>
+
+                            <div class="form-group">
                                 <label>Định dạng ảnh cho phép</label>
                                 <div class="checkbox-group">
                                     <label class="checkbox-container">

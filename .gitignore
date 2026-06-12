@@ -52,3 +52,7 @@ debug_*.py
 # PyInstaller
 *.spec
 WebHarvest.spec
+
+# Local settings & logs (contains credentials)
+webharvest_settings.json
+*.log
