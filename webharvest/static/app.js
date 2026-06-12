@@ -3,7 +3,21 @@ document.addEventListener("DOMContentLoaded", () => {
     lucide.createIcons();
     loadHistory();
     initProxyPanel();
+    initAppleScrollAnimations();
 });
+
+// Scroll Animations
+function initAppleScrollAnimations() {
+    const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+            if (entry.isIntersecting) {
+                entry.target.classList.add('is-visible');
+            }
+        });
+    }, { threshold: 0.05, rootMargin: '0px 0px -20px 0px' });
+
+    document.querySelectorAll('.apple-animate').forEach(el => observer.observe(el));
+}
 
 // ── DataImpulse Proxy Panel Logic ──────────────────────────────────
 function initProxyPanel() {

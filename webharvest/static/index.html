@@ -6,46 +6,41 @@
     <title>WebHarvest - Advanced Web Scraper & Image Downloader</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Import Inter for signature Apple typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://unpkg.com/lucide@latest"></script>
 </head>
 <body>
-    <div class="glow-bg">
-        <div class="ball ball-1"></div>
-        <div class="ball ball-2"></div>
-        <div class="ball ball-3"></div>
-    </div>
+    <div class="glow-bg"></div>
 
+    <!-- Global navigation header -->
+    <header class="app-header">
+        <div class="logo-area">
+            <div class="logo-icon">
+                <i data-lucide="sprout"></i>
+            </div>
+            <h1>WebHarvest</h1>
+            <p class="tagline">Trình cào và tải ảnh tự động</p>
+        </div>
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="scraper">
+                <i data-lucide="terminal"></i> Bộ cào dữ liệu
+            </button>
+            <button class="tab-btn" data-tab="gallery" id="btn-gallery-tab">
+                <i data-lucide="image"></i> Kho ảnh đã tải
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
     <div class="app-container">
-        <!-- Header -->
-        <header class="app-header">
-            <div class="logo-area">
-                <div class="logo-icon">
-                    <i data-lucide="sprout"></i>
-                </div>
-                <div>
-                    <h1>WebHarvest</h1>
-                    <p class="tagline">Trình cào và tải ảnh tự động nâng cao</p>
-                </div>
-            </div>
-            <div class="tabs">
-                <button class="tab-btn active" data-tab="scraper">
-                    <i data-lucide="terminal"></i> Bộ cào dữ liệu
-                </button>
-                <button class="tab-btn" data-tab="gallery" id="btn-gallery-tab">
-                    <i data-lucide="image"></i> Kho ảnh đã tải
-                </button>
-            </div>
-        </header>
-
-        <!-- Main Content -->
-        <main class="app-main">
+        <main class="apple-page-enter">
             <!-- Scraper Tab -->
             <section id="tab-scraper" class="tab-content active">
                 <div class="grid-layout">
                     <!-- Left Column: Config -->
-                    <div class="card config-card glass">
+                    <div class="card config-card apple-animate">
                         <div class="card-header">
                             <i data-lucide="sliders"></i>
                             <h2>Cấu hình cào dữ liệu</h2>
@@ -164,10 +159,10 @@
                                     </div>
                                 </div>
                                 <div class="proxy-actions">
-                                    <button type="button" id="btn-test-proxy" class="btn btn-outline-sm">
+                                    <button type="button" id="btn-test-proxy" class="btn-outline-sm btn-press">
                                         <i data-lucide="plug"></i> Kiểm tra kết nối
                                     </button>
-                                    <button type="button" id="btn-save-proxy" class="btn btn-outline-sm">
+                                    <button type="button" id="btn-save-proxy" class="btn-outline-sm btn-press">
                                         <i data-lucide="save"></i> Lưu cài đặt
                                     </button>
                                     <span id="proxy-test-result" class="proxy-test-result"></span>
@@ -224,10 +219,10 @@
                             </div>
 
                             <div class="action-buttons">
-                                <button type="submit" id="btn-start" class="btn btn-primary btn-glow">
+                                <button type="submit" id="btn-start" class="btn btn-primary btn-press">
                                     <i data-lucide="play"></i> Bắt đầu Crawl
                                 </button>
-                                <button type="button" id="btn-stop" class="btn btn-danger" disabled>
+                                <button type="button" id="btn-stop" class="btn btn-danger btn-press" disabled>
                                     <i data-lucide="square"></i> Dừng
                                 </button>
                             </div>
@@ -237,35 +232,35 @@
                     <!-- Right Column: Status & Realtime Logs -->
                     <div class="right-column">
                         <!-- Stats Grid -->
-                        <div class="stats-grid">
-                            <div class="stat-card glass">
+                        <div class="stats-grid apple-animate">
+                            <div class="stat-card">
                                 <div class="stat-icon icon-blue">
                                     <i data-lucide="chrome"></i>
                                 </div>
                                 <div class="stat-info">
-                                    <span class="stat-label">Đã duyệt trang</span>
+                                    <span class="stat-label">Đã duyệt</span>
                                     <span class="stat-value" id="stat-pages">0</span>
                                 </div>
                             </div>
-                            <div class="stat-card glass">
+                            <div class="stat-card">
                                 <div class="stat-icon icon-yellow">
                                     <i data-lucide="search"></i>
                                 </div>
                                 <div class="stat-info">
-                                    <span class="stat-label">Tìm thấy ảnh</span>
+                                    <span class="stat-label">Tìm thấy</span>
                                     <span class="stat-value" id="stat-found">0</span>
                                 </div>
                             </div>
-                            <div class="stat-card glass">
+                            <div class="stat-card">
                                 <div class="stat-icon icon-green">
                                     <i data-lucide="download-cloud"></i>
                                 </div>
                                 <div class="stat-info">
-                                    <span class="stat-label">Đã tải về</span>
+                                    <span class="stat-label">Đã tải</span>
                                     <span class="stat-value" id="stat-downloaded">0</span>
                                 </div>
                             </div>
-                            <div class="stat-card glass">
+                            <div class="stat-card">
                                 <div class="stat-icon icon-red">
                                     <i data-lucide="alert-triangle"></i>
                                 </div>
@@ -277,7 +272,7 @@
                         </div>
 
                         <!-- Realtime Logs -->
-                        <div class="card logs-card glass">
+                        <div class="card logs-card apple-animate">
                             <div class="card-header">
                                 <div class="title-with-badge">
                                     <i data-lucide="activity"></i>
@@ -293,7 +288,7 @@
                 </div>
 
                 <!-- Live Stream Gallery -->
-                <div class="card gallery-card glass">
+                <div class="card gallery-card apple-animate">
                     <div class="card-header">
                         <i data-lucide="images"></i>
                         <h2>Ảnh đang tải trực tiếp</h2>
@@ -307,13 +302,13 @@
 
             <!-- Gallery / History Tab -->
             <section id="tab-gallery" class="tab-content">
-                <div class="gallery-controls-card card glass">
+                <div class="gallery-controls-card card apple-animate">
                     <div class="gallery-filters">
                         <div class="form-group flex-grow">
                             <label for="history-output-dir">Xem ảnh từ thư mục:</label>
                             <div class="input-with-button">
                                 <input type="text" id="history-output-dir" value="./output" placeholder="./output">
-                                <button type="button" id="btn-refresh-history" class="btn btn-secondary">
+                                <button type="button" id="btn-refresh-history" class="btn btn-secondary btn-press">
                                     <i data-lucide="refresh-cw"></i> Quét thư mục
                                 </button>
                             </div>
@@ -328,7 +323,7 @@
                     </div>
                 </div>
 
-                <div class="card glass history-gallery-container">
+                <div class="card history-gallery-container apple-animate">
                     <div class="card-header">
                         <i data-lucide="archive"></i>
                         <h2>Danh sách ảnh trong thư mục lưu trữ</h2>
@@ -345,7 +340,7 @@
     <!-- Image Modal Viewer -->
     <div id="image-modal" class="modal">
         <span class="close-modal">&times;</span>
-        <img class="modal-content" id="modal-img">
+        <img class="modal-content" id="modal-img" alt="Xem chi tiết ảnh">
         <div id="modal-caption" class="modal-caption"></div>
     </div>
 
