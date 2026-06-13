@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: webharvest
+      POSTGRES_PASSWORD: webharvest
+      POSTGRES_DB: webharvest_license
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webharvest"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  license-server:
+    build: .
+    ports:
+      - "8443:8443"
+    env_file:
+      - .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://webharvest:webharvest@postgres:5432/webharvest_license
+
+volumes:
+  pgdata:

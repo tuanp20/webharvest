@@ -4,6 +4,8 @@ selectolax>=0.3.17
 curl_cffi>=0.9
 fastapi>=0.100.0
 uvicorn[standard]>=0.20.0
+openpyxl>=3.1.0
+python-multipart>=0.0.6
 
 # Desktop UI
 pywebview>=5.0

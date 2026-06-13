@@ -23,6 +23,7 @@
             <h1>WebHarvest</h1>
             <p class="tagline">Trình cào và tải ảnh tự động</p>
         </div>
+        <span id="tier-badge" class="tier-badge" style="display:none"></span>
         <div class="tabs">
             <button class="tab-btn active" data-tab="scraper">
                 <i data-lucide="terminal"></i> Bộ cào dữ liệu
@@ -46,11 +47,78 @@
                             <h2>Cấu hình cào dữ liệu</h2>
                         </div>
                         <form id="crawl-form" class="config-form">
-                            <div class="form-group">
-                                <label for="url">URL mục tiêu</label>
-                                <div class="input-with-icon">
-                                    <i data-lucide="link"></i>
-                                    <input type="url" id="url" required placeholder="https://example.com/gallery" value="https://www.wikipedia.org/">
+                            <!-- Mode Toggle: Single URL vs Batch -->
+                            <div class="mode-toggle-group">
+                                <label class="mode-label">Chế độ nhập liệu</label>
+                                <div class="mode-toggle">
+                                    <button type="button" class="mode-btn active" data-mode="single">
+                                        <i data-lucide="link"></i> Đơn lẻ
+                                    </button>
+                                    <button type="button" class="mode-btn" data-mode="batch">
+                                        <i data-lucide="list"></i> Hàng loạt
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Single URL Panel (default) -->
+                            <div id="single-url-panel">
+                                <div class="form-group">
+                                    <label for="url">URL mục tiêu</label>
+                                    <div class="input-with-icon">
+                                        <i data-lucide="link"></i>
+                                        <input type="url" id="url" placeholder="https://example.com/gallery" value="https://www.wikipedia.org/">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Batch Import Panel (hidden by default) -->
+                            <div id="batch-import-panel" style="display:none;">
+                                <div class="batch-source-tabs">
+                                    <button type="button" class="batch-tab active" data-source="file">
+                                        <i data-lucide="file-spreadsheet"></i> Upload Excel/CSV
+                                    </button>
+                                    <button type="button" class="batch-tab" data-source="sheet">
+                                        <i data-lucide="sheet"></i> Google Sheets
+                                    </button>
+                                </div>
+
+                                <!-- File Upload Source -->
+                                <div id="batch-file-source" class="batch-source-content">
+                                    <div class="file-drop-zone" id="file-drop-zone">
+                                        <i data-lucide="upload-cloud"></i>
+                                        <p>Kéo thả file hoặc <span class="file-browse-link">chọn file</span></p>
+                                        <p class="file-hint">.xlsx, .csv, .txt — Cột đầu tiên chứa URL</p>
+                                        <input type="file" id="batch-file-input" accept=".xlsx,.xls,.csv,.tsv,.txt" hidden>
+                                    </div>
+                                    <div id="file-upload-status" class="upload-status" style="display:none;"></div>
+                                </div>
+
+                                <!-- Google Sheets Source -->
+                                <div id="batch-sheet-source" class="batch-source-content" style="display:none;">
+                                    <div class="form-group">
+                                        <label for="sheet-url">Link Google Sheets (công khai)</label>
+                                        <div class="input-with-icon">
+                                            <i data-lucide="sheet"></i>
+                                            <input type="url" id="sheet-url" placeholder="https://docs.google.com/spreadsheets/d/...">
+                                        </div>
+                                    </div>
+                                    <button type="button" id="btn-parse-sheet" class="btn-outline-sm btn-press">
+                                        <i data-lucide="download"></i> Tải & Phân tích
+                                    </button>
+                                    <div id="sheet-parse-status" class="upload-status" style="display:none;"></div>
+                                </div>
+
+                                <!-- URL Preview Table -->
+                                <div id="url-preview-section" class="url-preview-section" style="display:none;">
+                                    <div class="url-preview-header">
+                                        <span class="url-count-badge" id="url-count-badge">0 URL</span>
+                                        <button type="button" id="btn-clear-urls" class="btn-outline-sm btn-press btn-outline-danger">
+                                            <i data-lucide="trash-2"></i> Xóa tất cả
+                                        </button>
+                                    </div>
+                                    <div class="url-preview-list" id="url-preview-list">
+                                        <!-- Populated by JS -->
+                                    </div>
                                 </div>
                             </div>
 
@@ -235,7 +303,7 @@
                         <div class="stats-grid apple-animate">
                             <div class="stat-card">
                                 <div class="stat-icon icon-blue">
-                                    <i data-lucide="chrome"></i>
+                                    <i data-lucide="globe"></i>
                                 </div>
                                 <div class="stat-info">
                                     <span class="stat-label">Đã duyệt</span>
@@ -298,6 +366,30 @@
                         <div class="placeholder-text">Ảnh được tải xuống sẽ xuất hiện tại đây theo thời gian thực...</div>
                     </div>
                 </div>
+
+                <!-- Batch Progress Section (hidden by default, shown during batch crawl) -->
+                <div id="batch-progress-section" class="card batch-progress-card apple-animate" style="display:none;">
+                    <div class="card-header">
+                        <i data-lucide="layers"></i>
+                        <h2>Tiến trình Batch Crawl</h2>
+                        <span class="counter" id="batch-progress-counter">0/0</span>
+                    </div>
+                    <!-- Overall progress bar -->
+                    <div class="batch-overall-progress">
+                        <div class="progress-bar-track">
+                            <div class="progress-bar-fill" id="batch-progress-bar" style="width: 0%"></div>
+                        </div>
+                        <div class="batch-stats-row">
+                            <span class="batch-stat"><i data-lucide="check-circle"></i> Thành công: <strong id="batch-stat-success">0</strong></span>
+                            <span class="batch-stat"><i data-lucide="x-circle"></i> Lỗi: <strong id="batch-stat-failed">0</strong></span>
+                            <span class="batch-stat"><i data-lucide="clock"></i> Đang chạy: <strong id="batch-stat-running">0</strong></span>
+                        </div>
+                    </div>
+                    <!-- Per-URL Status Cards -->
+                    <div class="batch-url-cards" id="batch-url-cards">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
             </section>
 
             <!-- Gallery / History Tab -->
@@ -342,6 +434,38 @@
         <span class="close-modal">&times;</span>
         <img class="modal-content" id="modal-img" alt="Xem chi tiết ảnh">
         <div id="modal-caption" class="modal-caption"></div>
+    </div>
+
+    <!-- License Gate Overlay -->
+    <div id="license-gate" class="license-gate" style="display:none">
+        <div class="license-gate-card">
+            <div class="license-logo">
+                <i data-lucide="sprout" style="width:48px;height:48px;color:#6366f1"></i>
+                <h2>WebHarvest License</h2>
+                <p>Nhập license key để kích hoạt ứng dụng</p>
+            </div>
+            <div class="license-form">
+                <input type="text" id="license-key-input" placeholder="WH-XXXXX-XXXXX-XXXXX-XXXXX" class="license-input" autocomplete="off" spellcheck="false">
+                <button type="button" onclick="activateLicenseKey()" class="btn btn-primary btn-press" style="width:100%">Kích hoạt</button>
+                <p id="license-error" class="license-error" style="display:none"></p>
+                <p id="payment-status" class="payment-status" style="display:none"></p>
+            </div>
+            <div class="license-separator"><span>hoặc mua license mới</span></div>
+            <div class="license-plans">
+                <button type="button" onclick="openPurchaseFlow('basic', 1)" class="license-plan-btn">
+                    <span class="plan-name">⚡ Basic</span>
+                    <span class="plan-price">99,000đ/tháng</span>
+                </button>
+                <button type="button" onclick="openPurchaseFlow('pro', 1)" class="license-plan-btn plan-recommended">
+                    <span class="plan-name">⭐ Pro</span>
+                    <span class="plan-price">499,000đ/tháng</span>
+                </button>
+                <button type="button" onclick="openPurchaseFlow('unlimited', 1)" class="license-plan-btn">
+                    <span class="plan-name">💎 Unlimited</span>
+                    <span class="plan-price">899,000đ/tháng</span>
+                </button>
+            </div>
+        </div>
     </div>
 
     <script src="/static/app.js"></script>

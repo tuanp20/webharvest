@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebHarvest Admin — License Management</title>
+    <meta name="description" content="Admin dashboard for WebHarvest license key management, revenue monitoring, and system analytics.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/admin/admin.css">
+</head>
+<body>
+    <!-- Login Screen -->
+    <div id="loginScreen" class="login-screen">
+        <div class="login-card">
+            <div class="login-logo">
+                <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
+                    <rect width="48" height="48" rx="12" fill="url(#grad1)"/>
+                    <path d="M14 20l6 6 14-14M14 28l6 6 14-14" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+                    <defs><linearGradient id="grad1" x1="0" y1="0" x2="48" y2="48"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs>
+                </svg>
+                <h1>WebHarvest Admin</h1>
+                <p>License Management System</p>
+            </div>
+            <form id="loginForm" class="login-form">
+                <div class="form-group">
+                    <label for="loginPassword">Admin Password</label>
+                    <input type="password" id="loginPassword" placeholder="Enter admin password" autocomplete="current-password" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-full" id="loginBtn">
+                    <span>Sign In</span>
+                </button>
+                <p id="loginError" class="error-text" style="display:none"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" class="main-app" style="display:none">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+                    <rect width="48" height="48" rx="12" fill="url(#grad2)"/>
+                    <path d="M14 20l6 6 14-14M14 28l6 6 14-14" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.8"/>
+                    <defs><linearGradient id="grad2" x1="0" y1="0" x2="48" y2="48"><stop stop-color="#6366f1"/><stop offset="1" stop-color="#8b5cf6"/></linearGradient></defs>
+                </svg>
+                <span class="sidebar-title">WebHarvest</span>
+            </div>
+            <nav class="sidebar-nav">
+                <button class="nav-item active" data-page="overview" id="navOverview">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+                    <span>Overview</span>
+                </button>
+                <button class="nav-item" data-page="keys" id="navKeys">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                    <span>License Keys</span>
+                </button>
+                <button class="nav-item" data-page="create" id="navCreate">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v8m-4-4h8"/></svg>
+                    <span>Create Key</span>
+                </button>
+                <button class="nav-item" data-page="requests" id="navRequests">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                    <span>Request Logs</span>
+                </button>
+                <button class="nav-item" data-page="revenue" id="navRevenue">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    <span>Revenue</span>
+                </button>
+            </nav>
+            <div class="sidebar-footer">
+                <button class="btn btn-ghost btn-sm" id="logoutBtn">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                    <span>Logout</span>
+                </button>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Overview Page -->
+            <section id="pageOverview" class="page active">
+                <div class="page-header">
+                    <h1>Dashboard Overview</h1>
+                    <div class="date-filter">
+                        <input type="date" id="overviewDateFrom" class="input-date">
+                        <span>→</span>
+                        <input type="date" id="overviewDateTo" class="input-date">
+                        <button class="btn btn-sm btn-secondary" id="overviewFilterBtn">Filter</button>
+                    </div>
+                </div>
+                <div class="stats-grid" id="statsGrid">
+                    <div class="stat-card"><div class="stat-icon bg-blue"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div><div class="stat-info"><span class="stat-value" id="statTotalUsers">—</span><span class="stat-label">Total Users</span></div></div>
+                    <div class="stat-card"><div class="stat-icon bg-green"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div><div class="stat-info"><span class="stat-value" id="statActiveKeys">—</span><span class="stat-label">Active Keys</span></div></div>
+                    <div class="stat-card"><div class="stat-icon bg-yellow"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="stat-info"><span class="stat-value" id="statExpiredKeys">—</span><span class="stat-label">Expired</span></div></div>
+                    <div class="stat-card"><div class="stat-icon bg-purple"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div><div class="stat-info"><span class="stat-value" id="statRevenue">—</span><span class="stat-label">Revenue (VNĐ)</span></div></div>
+                    <div class="stat-card"><div class="stat-icon bg-cyan"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></div><div class="stat-info"><span class="stat-value" id="statRequests">—</span><span class="stat-label">Total Requests</span></div></div>
+                </div>
+                <div class="charts-row">
+                    <div class="chart-card"><h3>Tier Distribution</h3><canvas id="chartTiers" width="300" height="200"></canvas></div>
+                    <div class="chart-card"><h3>Recent Activity</h3><div id="recentActivity" class="activity-list"></div></div>
+                </div>
+            </section>
+
+            <!-- Keys Page -->
+            <section id="pageKeys" class="page">
+                <div class="page-header">
+                    <h1>License Keys</h1>
+                    <div class="filter-bar">
+                        <select id="keysFilterTier" class="input-select"><option value="">All Tiers</option><option value="basic">Basic</option><option value="pro">Pro</option><option value="unlimited">Unlimited</option></select>
+                        <select id="keysFilterStatus" class="input-select"><option value="">All Status</option><option value="unused">Unused</option><option value="active">Active</option><option value="expired">Expired</option><option value="revoked">Revoked</option></select>
+                        <input type="text" id="keysSearch" class="input-text" placeholder="Search key, email, device...">
+                        <button class="btn btn-sm btn-secondary" id="keysFilterBtn">Search</button>
+                        <button class="btn btn-sm btn-ghost" id="keysExportBtn">Export CSV</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="keysTable">
+                        <thead><tr><th>Key</th><th>Tier</th><th>Status</th><th>Duration</th><th>Device</th><th>Owner</th><th>Expires</th><th>Requests</th><th>Actions</th></tr></thead>
+                        <tbody id="keysTableBody"></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="keysPagination"></div>
+            </section>
+
+            <!-- Create Key Page -->
+            <section id="pageCreate" class="page">
+                <div class="page-header"><h1>Create License Key</h1></div>
+                <div class="create-form-container">
+                    <form id="createKeyForm" class="create-form">
+                        <div class="form-row">
+                            <div class="form-group"><label>Tier</label><select id="createTier" class="input-select" required><option value="basic">Basic — 99,000đ/mo</option><option value="pro">Pro — 499,000đ/mo</option><option value="unlimited">Unlimited — 899,000đ/mo</option></select></div>
+                            <div class="form-group"><label>Duration</label><select id="createDuration" class="input-select" required><option value="1">1 Month</option><option value="3">3 Months (-10%)</option><option value="6">6 Months (-15%)</option><option value="12">1 Year (-20%)</option></select></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Owner Email</label><input type="email" id="createEmail" class="input-text" placeholder="user@example.com"></div>
+                            <div class="form-group"><label>Owner Name</label><input type="text" id="createName" class="input-text" placeholder="Nguyen Van A"></div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group"><label>Count</label><input type="number" id="createCount" class="input-text" value="1" min="1" max="100"></div>
+                            <div class="form-group"><label>Note</label><input type="text" id="createNote" class="input-text" placeholder="Optional note"></div>
+                        </div>
+                        <button type="submit" class="btn btn-primary">Generate Key(s)</button>
+                    </form>
+                    <div id="createResult" class="create-result" style="display:none"></div>
+                </div>
+            </section>
+
+            <!-- Request Logs Page -->
+            <section id="pageRequests" class="page">
+                <div class="page-header">
+                    <h1>Request Logs</h1>
+                    <div class="filter-bar">
+                        <select id="reqFilterStatus" class="input-select"><option value="">All</option><option value="success">Success</option><option value="error">Errors</option><option value="rate_limited">Rate Limited</option></select>
+                        <input type="date" id="reqDateFrom" class="input-date">
+                        <span>→</span>
+                        <input type="date" id="reqDateTo" class="input-date">
+                        <button class="btn btn-sm btn-secondary" id="reqFilterBtn">Filter</button>
+                    </div>
+                </div>
+                <div class="table-container">
+                    <table class="data-table" id="reqTable">
+                        <thead><tr><th>Time</th><th>Key</th><th>Action</th><th>URL</th><th>Status</th><th>Error</th><th>IP</th></tr></thead>
+                        <tbody id="reqTableBody"></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="reqPagination"></div>
+            </section>
+
+            <!-- Revenue Page -->
+            <section id="pageRevenue" class="page">
+                <div class="page-header">
+                    <h1>Revenue Report</h1>
+                    <div class="filter-bar">
+                        <select id="revGroupBy" class="input-select"><option value="day">By Day</option><option value="month">By Month</option></select>
+                        <input type="date" id="revDateFrom" class="input-date">
+                        <span>→</span>
+                        <input type="date" id="revDateTo" class="input-date">
+                        <button class="btn btn-sm btn-secondary" id="revFilterBtn">Filter</button>
+                    </div>
+                </div>
+                <div class="revenue-summary" id="revenueSummary"></div>
+                <div class="table-container">
+                    <table class="data-table" id="revTable">
+                        <thead><tr><th>Period</th><th>Tier</th><th>Transactions</th><th>Revenue (VNĐ)</th></tr></thead>
+                        <tbody id="revTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Key Detail Modal -->
+    <div id="keyDetailModal" class="modal" style="display:none">
+        <div class="modal-backdrop" onclick="closeModal()"></div>
+        <div class="modal-content">
+            <div class="modal-header"><h2>Key Details</h2><button class="modal-close" onclick="closeModal()">×</button></div>
+            <div class="modal-body" id="keyDetailBody"></div>
+            <div class="modal-footer" id="keyDetailFooter"></div>
+        </div>
+    </div>
+
+    <script src="/static/admin/admin.js"></script>
+</body>
+</html>

@@ -1,6 +1,203 @@
+// ══════════════════════════════════════════════════════════════
+// LICENSE GATE — Validates key on startup, shows gate if needed
+// ══════════════════════════════════════════════════════════════
+
+const LICENSE_KEY_STORAGE = 'wh_license_key';
+const LICENSE_DATA_STORAGE = 'wh_license_data';
+let licenseData = null;  // {tier, limits, expires_at, ...}
+
+async function initLicenseGate() {
+    const savedKey = localStorage.getItem(LICENSE_KEY_STORAGE);
+    if (savedKey) {
+        try {
+            const resp = await fetch('/api/license/validate-local', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: savedKey }),
+            });
+            const result = await resp.json();
+            if (result.success && result.data && result.data.valid) {
+                licenseData = result.data;
+                localStorage.setItem(LICENSE_DATA_STORAGE, JSON.stringify(licenseData));
+                applyLicenseTier();
+                hideLicenseGate();
+                return;
+            }
+        } catch (e) {
+            // Offline — try cached data
+            const cached = localStorage.getItem(LICENSE_DATA_STORAGE);
+            if (cached) {
+                licenseData = JSON.parse(cached);
+                applyLicenseTier();
+                hideLicenseGate();
+                return;
+            }
+        }
+    }
+    // No valid key — check if license server is configured
+    try {
+        const devResp = await fetch('/api/license/packages');
+        const devData = await devResp.json();
+        if (devData.success && devData.data && devData.data.length === 0) {
+            // Dev mode — no license server configured
+            licenseData = { valid: true, tier: 'unlimited', limits: { batch_crawl: true, stealth_mode: true, proxy_support: true, max_daily_urls: 999999, max_concurrent: 20 } };
+            applyLicenseTier();
+            hideLicenseGate();
+            return;
+        }
+    } catch (e) { /* ignore */ }
+
+    showLicenseGate();
+}
+
+function showLicenseGate() {
+    const gate = document.getElementById('license-gate');
+    if (gate) gate.style.display = 'flex';
+}
+
+function hideLicenseGate() {
+    const gate = document.getElementById('license-gate');
+    if (gate) gate.style.display = 'none';
+}
+
+function applyLicenseTier() {
+    if (!licenseData) return;
+    const tier = licenseData.tier || 'basic';
+    const limits = licenseData.limits || {};
+
+    // Update tier badge in header
+    const badge = document.getElementById('tier-badge');
+    if (badge) {
+        const tierNames = { basic: 'Basic', pro: 'Pro', unlimited: 'Unlimited' };
+        const tierIcons = { basic: '⚡', pro: '⭐', unlimited: '💎' };
+        badge.textContent = `${tierIcons[tier] || '⚡'} ${tierNames[tier] || tier}`;
+        badge.className = `tier-badge tier-${tier}`;
+        badge.style.display = 'inline-flex';
+
+        if (licenseData.expires_at) {
+            const exp = new Date(licenseData.expires_at);
+            badge.title = `Hết hạn: ${exp.toLocaleDateString('vi-VN')}`;
+        }
+    }
+
+    // Disable batch crawl for Basic
+    if (!limits.batch_crawl) {
+        document.querySelectorAll('.mode-btn[data-mode="batch"]').forEach(btn => {
+            btn.classList.add('tier-locked');
+            btn.title = 'Nâng cấp lên Pro để sử dụng Batch Crawl';
+        });
+    }
+
+    // Disable stealth/proxy for Basic
+    const fetcherSelect = document.getElementById('fetcher');
+    if (fetcherSelect && limits.allowed_fetchers) {
+        Array.from(fetcherSelect.options).forEach(opt => {
+            if (!limits.allowed_fetchers.includes(opt.value) && opt.value !== 'auto') {
+                opt.disabled = true;
+                opt.textContent += ' 🔒';
+            }
+        });
+    }
+}
+
+async function activateLicenseKey() {
+    const input = document.getElementById('license-key-input');
+    const errEl = document.getElementById('license-error');
+    const key = (input?.value || '').trim().toUpperCase();
+
+    if (!key) { errEl.textContent = 'Vui lòng nhập license key'; errEl.style.display = 'block'; return; }
+
+    errEl.style.display = 'none';
+    try {
+        const resp = await fetch('/api/license/activate-local', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+            localStorage.setItem(LICENSE_KEY_STORAGE, key);
+            licenseData = data.data;
+            licenseData.valid = true;
+            localStorage.setItem(LICENSE_DATA_STORAGE, JSON.stringify(licenseData));
+            applyLicenseTier();
+            hideLicenseGate();
+        } else {
+            const messages = {
+                'NOT_FOUND': 'Key không tồn tại. Vui lòng kiểm tra lại.',
+                'DEVICE_MISMATCH': 'Key đã được sử dụng trên thiết bị khác.',
+                'EXPIRED': 'Key đã hết hạn. Vui lòng gia hạn.',
+                'REVOKED': 'Key đã bị thu hồi.',
+                'UNREACHABLE': 'Không thể kết nối đến server. Kiểm tra mạng.',
+            };
+            errEl.textContent = messages[data.error_code] || data.error || 'Kích hoạt thất bại';
+            errEl.style.display = 'block';
+        }
+    } catch (e) {
+        errEl.textContent = 'Lỗi kết nối. Kiểm tra mạng và thử lại.';
+        errEl.style.display = 'block';
+    }
+}
+
+let _paymentPollInterval = null;
+
+async function openPurchaseFlow(tier, duration) {
+    const errEl = document.getElementById('license-error');
+    errEl.style.display = 'none';
+
+    try {
+        const resp = await fetch('/api/license/create-payment', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tier, duration_months: duration }),
+        });
+        const data = await resp.json();
+        if (data.success && data.data?.checkout_url) {
+            // Open in system browser
+            window.open(data.data.checkout_url, '_blank');
+
+            // Start polling for payment confirmation
+            const orderCode = data.data.order_code;
+            const statusEl = document.getElementById('payment-status');
+            if (statusEl) { statusEl.textContent = '⏳ Đang chờ thanh toán...'; statusEl.style.display = 'block'; }
+
+            if (_paymentPollInterval) clearInterval(_paymentPollInterval);
+            _paymentPollInterval = setInterval(async () => {
+                try {
+                    const vResp = await fetch('/api/license/verify-payment', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ order_code: orderCode }),
+                    });
+                    const vData = await vResp.json();
+                    if (vData.success && vData.data?.status === 'paid') {
+                        clearInterval(_paymentPollInterval);
+                        if (vData.data.key) {
+                            localStorage.setItem(LICENSE_KEY_STORAGE, vData.data.key);
+                            if (statusEl) { statusEl.textContent = `✅ Thanh toán thành công! Key: ${vData.data.key}`; }
+                            // Re-validate
+                            setTimeout(() => initLicenseGate(), 1500);
+                        }
+                    } else if (vData.data?.status === 'cancelled') {
+                        clearInterval(_paymentPollInterval);
+                        if (statusEl) { statusEl.textContent = '❌ Thanh toán đã bị hủy.'; }
+                    }
+                } catch (e) { /* keep polling */ }
+            }, 3000);
+        } else {
+            errEl.textContent = data.error || 'Không thể tạo link thanh toán';
+            errEl.style.display = 'block';
+        }
+    } catch (e) {
+        errEl.textContent = 'Lỗi kết nối đến server.';
+        errEl.style.display = 'block';
+    }
+}
+
 // Initialize Lucide Icons
 document.addEventListener("DOMContentLoaded", () => {
     lucide.createIcons();
+    initLicenseGate();
     loadHistory();
     initProxyPanel();
     initAppleScrollAnimations();
@@ -293,6 +490,12 @@ modal.addEventListener("click", (e) => {
 crawlForm.addEventListener("submit", (e) => {
     e.preventDefault();
     
+    // Check if batch mode
+    if (currentMode === "batch") {
+        startBatchCrawl();
+        return;
+    }
+    
     const url = document.getElementById("url").value.trim();
     const output_dir = document.getElementById("output_dir").value.trim();
     const depth = parseInt(document.getElementById("depth").value);
@@ -546,4 +749,296 @@ historyOutputDir.addEventListener("keypress", (e) => {
     if (e.key === "Enter") {
         loadHistory();
     }
+});
+
+// ══════════════════════════════════════════════════════════════
+// BATCH IMPORT LOGIC
+// ══════════════════════════════════════════════════════════════
+
+let currentMode = "single"; // "single" | "batch"
+let batchUrls = []; // Array of URLs parsed from file/sheet
+let batchWs = null;
+
+// Mode Toggle
+document.querySelectorAll(".mode-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+        document.querySelectorAll(".mode-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        currentMode = btn.dataset.mode;
+        document.getElementById("single-url-panel").style.display = currentMode === "single" ? "block" : "none";
+        document.getElementById("batch-import-panel").style.display = currentMode === "batch" ? "block" : "none";
+        lucide.createIcons();
+    });
+});
+
+// Batch Source Tabs (File vs Google Sheets)
+document.querySelectorAll(".batch-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+        document.querySelectorAll(".batch-tab").forEach(t => t.classList.remove("active"));
+        tab.classList.add("active");
+        const src = tab.dataset.source;
+        document.getElementById("batch-file-source").style.display = src === "file" ? "block" : "none";
+        document.getElementById("batch-sheet-source").style.display = src === "sheet" ? "block" : "none";
+        lucide.createIcons();
+    });
+});
+
+// File Upload — Drop Zone
+const dropZone = document.getElementById("file-drop-zone");
+const fileInput = document.getElementById("batch-file-input");
+
+if (dropZone && fileInput) {
+    dropZone.addEventListener("click", () => fileInput.click());
+    dropZone.querySelector(".file-browse-link")?.addEventListener("click", (e) => { e.stopPropagation(); fileInput.click(); });
+
+    dropZone.addEventListener("dragover", (e) => { e.preventDefault(); dropZone.classList.add("drag-over"); });
+    dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag-over"));
+    dropZone.addEventListener("drop", (e) => {
+        e.preventDefault(); dropZone.classList.remove("drag-over");
+        if (e.dataTransfer.files.length) { fileInput.files = e.dataTransfer.files; handleFileUpload(e.dataTransfer.files[0]); }
+    });
+    fileInput.addEventListener("change", () => { if (fileInput.files.length) handleFileUpload(fileInput.files[0]); });
+}
+
+async function handleFileUpload(file) {
+    const statusEl = document.getElementById("file-upload-status");
+    statusEl.style.display = "block";
+    statusEl.className = "upload-status loading";
+    statusEl.textContent = `⏳ Đang phân tích ${file.name}...`;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+        const resp = await fetch("/api/upload-batch", { method: "POST", body: formData });
+        const data = await resp.json();
+        if (data.ok && data.data) {
+            displayParseResult(data.data, statusEl);
+        } else {
+            statusEl.className = "upload-status error";
+            statusEl.textContent = `✗ ${data.error || "Lỗi không xác định"}`;
+        }
+    } catch (e) {
+        statusEl.className = "upload-status error";
+        statusEl.textContent = `✗ Không thể kết nối server: ${e.message}`;
+    }
+}
+
+// Google Sheets Parse
+const btnParseSheet = document.getElementById("btn-parse-sheet");
+if (btnParseSheet) {
+    btnParseSheet.addEventListener("click", async () => {
+        const sheetUrl = document.getElementById("sheet-url").value.trim();
+        if (!sheetUrl) return;
+        const statusEl = document.getElementById("sheet-parse-status");
+        statusEl.style.display = "block";
+        statusEl.className = "upload-status loading";
+        statusEl.textContent = "⏳ Đang tải Google Sheet...";
+
+        try {
+            const resp = await fetch("/api/parse-sheet", {
+                method: "POST", headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ url: sheetUrl })
+            });
+            const data = await resp.json();
+            if (data.ok && data.data) {
+                displayParseResult(data.data, statusEl);
+            } else {
+                statusEl.className = "upload-status error";
+                statusEl.textContent = `✗ ${data.error || "Lỗi không xác định"}`;
+            }
+        } catch (e) {
+            statusEl.className = "upload-status error";
+            statusEl.textContent = `✗ ${e.message}`;
+        }
+    });
+}
+
+function displayParseResult(data, statusEl) {
+    batchUrls = data.urls || [];
+    const errors = data.errors || [];
+
+    if (batchUrls.length === 0) {
+        statusEl.className = "upload-status error";
+        statusEl.textContent = `✗ Không tìm thấy URL hợp lệ. ${errors.join("; ")}`;
+        return;
+    }
+
+    statusEl.className = "upload-status success";
+    statusEl.textContent = `✓ ${data.valid_count} URL hợp lệ (${data.skipped_count} bỏ qua, ${data.duplicate_count} trùng)`;
+    if (errors.length) statusEl.textContent += ` — ${errors.join("; ")}`;
+
+    renderUrlPreview();
+}
+
+function renderUrlPreview() {
+    const section = document.getElementById("url-preview-section");
+    const list = document.getElementById("url-preview-list");
+    const badge = document.getElementById("url-count-badge");
+    section.style.display = "block";
+    badge.textContent = `${batchUrls.length} URL`;
+    list.innerHTML = "";
+
+    batchUrls.forEach((url, i) => {
+        const item = document.createElement("div");
+        item.className = "url-preview-item";
+        let domain = "unknown";
+        try { domain = new URL(url).hostname; } catch(e) {}
+        item.innerHTML = `
+            <span class="url-index">${i + 1}</span>
+            <span class="url-domain-chip">${domain}</span>
+            <span class="url-text" title="${url}">${url}</span>
+            <button type="button" class="url-remove-btn" data-idx="${i}"><i data-lucide="x"></i></button>
+        `;
+        item.querySelector(".url-remove-btn").addEventListener("click", () => {
+            batchUrls.splice(i, 1); renderUrlPreview(); lucide.createIcons();
+        });
+        list.appendChild(item);
+    });
+    lucide.createIcons();
+}
+
+// Clear all URLs
+const btnClearUrls = document.getElementById("btn-clear-urls");
+if (btnClearUrls) {
+    btnClearUrls.addEventListener("click", () => {
+        batchUrls = [];
+        document.getElementById("url-preview-section").style.display = "none";
+        document.getElementById("file-upload-status").style.display = "none";
+        document.getElementById("sheet-parse-status").style.display = "none";
+    });
+}
+
+// ── Batch Crawl WebSocket ──
+function startBatchCrawl() {
+    if (!batchUrls.length) { alert("Vui lòng import danh sách URL trước."); return; }
+
+    const output_dir = document.getElementById("output_dir").value.trim();
+    const depth = parseInt(document.getElementById("depth").value);
+    const max_pages = parseInt(document.getElementById("max_pages").value);
+    const fetcher = document.getElementById("fetcher").value;
+    const min_file_size = parseInt(document.getElementById("min_file_size").value) * 1024;
+    const formats = Array.from(document.querySelectorAll('input[name="format"]:checked')).map(cb => cb.value);
+    syncProxyHiddenField();
+    const proxy = document.getElementById("proxy").value.trim();
+
+    // UI reset
+    btnStart.disabled = true; btnStop.disabled = false;
+    statusBadge.textContent = "Batch đang chạy"; statusBadge.className = "badge badge-active";
+    logsViewer.innerHTML = ""; liveImageGrid.innerHTML = ""; liveImageCount = 0;
+    liveGalleryCount.textContent = "0 ảnh";
+    statPages.textContent = "0"; statFound.textContent = "0"; statDownloaded.textContent = "0"; statFailed.textContent = "0";
+
+    // Show batch progress
+    const batchSection = document.getElementById("batch-progress-section");
+    batchSection.style.display = "block";
+    document.getElementById("batch-progress-bar").style.width = "0%";
+    document.getElementById("batch-progress-counter").textContent = `0/${batchUrls.length}`;
+    document.getElementById("batch-stat-success").textContent = "0";
+    document.getElementById("batch-stat-failed").textContent = "0";
+    document.getElementById("batch-stat-running").textContent = "0";
+
+    // Build URL cards
+    const cardsEl = document.getElementById("batch-url-cards");
+    cardsEl.innerHTML = "";
+    batchUrls.forEach((url, i) => {
+        let domain = "unknown"; try { domain = new URL(url).hostname; } catch(e) {}
+        const card = document.createElement("div");
+        card.className = "batch-url-card status-pending";
+        card.id = `batch-card-${i}`;
+        card.innerHTML = `<span class="batch-card-idx">${i+1}</span><span class="batch-card-domain">${domain}</span><span class="batch-card-status">Đang chờ</span>`;
+        cardsEl.appendChild(card);
+    });
+    lucide.createIcons();
+
+    addLog(`Bắt đầu batch crawl ${batchUrls.length} URL...`, "system");
+
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    batchWs = new WebSocket(`${protocol}//${window.location.host}/api/ws/batch-crawl`);
+
+    let completedCount = 0, batchSuccess = 0, batchFailed = 0;
+
+    batchWs.onopen = () => {
+        batchWs.send(JSON.stringify({ urls: batchUrls, output_dir, depth, max_pages, fetcher, min_file_size, allowed_formats: formats, proxy: proxy || null }));
+    };
+
+    batchWs.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        const { event: evt, data: d } = msg;
+
+        switch (evt) {
+            case "batch_start":
+                addLog(`Batch bắt đầu: ${d.total_urls} URL, ${d.domain_groups} nhóm domain`, "system");
+                break;
+            case "batch_url_start": {
+                const card = document.getElementById(`batch-card-${d.index}`);
+                if (card) { card.className = "batch-url-card status-running"; card.querySelector(".batch-card-status").textContent = "Đang crawl..."; }
+                document.getElementById("batch-stat-running").textContent = parseInt(document.getElementById("batch-stat-running").textContent) + 1;
+                addLog(`[${d.index+1}/${batchUrls.length}] Bắt đầu: ${d.url}`, "info");
+                break;
+            }
+            case "page_fetched":
+                statPages.textContent = parseInt(statPages.textContent) + 1;
+                statFound.textContent = parseInt(statFound.textContent) + (d.images || 0);
+                break;
+            case "image_downloaded": {
+                statDownloaded.textContent = parseInt(statDownloaded.textContent) + 1;
+                liveImageCount++; liveGalleryCount.textContent = `${liveImageCount} ảnh`;
+                let domain = "unknown"; try { domain = new URL(d.url).hostname; } catch(e) {}
+                const fname = d.path.split(/[/\\]/).pop();
+                const card = createImageCard({ name: fname, path: d.path, domain, size: d.size });
+                if (liveImageGrid.querySelector(".placeholder-text")) liveImageGrid.innerHTML = "";
+                liveImageGrid.insertBefore(card, liveImageGrid.firstChild);
+                break;
+            }
+            case "batch_url_done": {
+                completedCount++; batchSuccess++;
+                const card = document.getElementById(`batch-card-${d.index}`);
+                if (card) { card.className = "batch-url-card status-success"; card.querySelector(".batch-card-status").textContent = `✓ ${d.result.images_downloaded} ảnh`; }
+                document.getElementById("batch-stat-success").textContent = batchSuccess;
+                document.getElementById("batch-stat-running").textContent = Math.max(0, parseInt(document.getElementById("batch-stat-running").textContent) - 1);
+                updateBatchProgress(completedCount, batchUrls.length);
+                addLog(`✓ [${d.index+1}] Xong: ${d.url} — ${d.result.images_downloaded} ảnh`, "success");
+                break;
+            }
+            case "batch_url_error": {
+                completedCount++; batchFailed++;
+                const card = document.getElementById(`batch-card-${d.index}`);
+                if (card) { card.className = "batch-url-card status-error"; card.querySelector(".batch-card-status").textContent = `✗ Lỗi`; }
+                document.getElementById("batch-stat-failed").textContent = batchFailed;
+                document.getElementById("batch-stat-running").textContent = Math.max(0, parseInt(document.getElementById("batch-stat-running").textContent) - 1);
+                updateBatchProgress(completedCount, batchUrls.length);
+                addLog(`✗ [${d.index+1}] Lỗi: ${d.url} — ${d.error}`, "error");
+                break;
+            }
+            case "batch_done":
+                addLog(`Batch hoàn thành: ${d.success} thành công, ${d.failed} lỗi`, "system");
+                closeBatchWs();
+                break;
+            case "error":
+                addLog(`Lỗi: ${d.message}`, "error");
+                closeBatchWs();
+                break;
+        }
+    };
+
+    batchWs.onerror = () => { addLog("Lỗi kết nối WebSocket.", "error"); closeBatchWs(); };
+    batchWs.onclose = () => { closeBatchWs(); };
+}
+
+function updateBatchProgress(done, total) {
+    const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+    document.getElementById("batch-progress-bar").style.width = `${pct}%`;
+    document.getElementById("batch-progress-counter").textContent = `${done}/${total}`;
+}
+
+function closeBatchWs() {
+    if (batchWs) { try { batchWs.close(); } catch(e) {} batchWs = null; }
+    btnStart.disabled = false; btnStop.disabled = true;
+    statusBadge.textContent = "Đang dừng"; statusBadge.className = "badge badge-inactive";
+}
+
+// Override stop button for batch mode too
+btnStop.addEventListener("click", () => {
+    if (batchWs) { addLog("Đang dừng batch...", "warn"); batchWs.close(); }
 });
