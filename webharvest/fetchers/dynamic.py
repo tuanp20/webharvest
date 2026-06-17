@@ -100,8 +100,8 @@ class DynamicFetcher(BaseFetcher):
         if self._browser is not None:
             return
 
-        pw = _import_playwright()
-        self._pw = pw.sync_api.sync_playwright()
+        from playwright.sync_api import sync_playwright
+        self._pw = sync_playwright()
         playwright = self._pw.__enter__()
 
         launcher = getattr(playwright, self._browser_type_name)

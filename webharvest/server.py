@@ -21,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from webharvest.config import CrawlConfig, FetcherType
-from webharvest.pipeline.crawler import CrawlPipeline
+from webharvest.pipeline import CrawlPipeline, ProductCrawlPipeline
 from webharvest.batch_parser import parse_file, parse_google_sheet, ParseResult
 
 import httpx as _httpx
@@ -62,7 +62,16 @@ def _get_settings_path() -> Path:
 
 # ── License Validation Layer ──────────────────────────────────────────────
 
-LICENSE_SERVER_URL = os.getenv("LICENSE_SERVER_URL", "")
+try:
+    from dotenv import load_dotenv
+    if getattr(sys, "frozen", False):
+        load_dotenv(Path(sys.executable).parent / ".env")
+    else:
+        load_dotenv(Path(__file__).parent.parent / ".env")
+except ImportError:
+    pass
+
+LICENSE_SERVER_URL = os.getenv("LICENSE_SERVER_URL", "http://127.0.0.1:8443")
 _license_cache: Dict[str, Any] = {}  # {key: {data, cached_at}}
 _LICENSE_CACHE_TTL = 300  # 5 minutes
 _LICENSE_GRACE_PERIOD = 86_400  # 24 hours offline grace
@@ -583,6 +592,112 @@ async def ws_crawl(websocket: WebSocket):
             await websocket.close()
         except Exception:
             pass
+
+
+@app.get("/api/products")
+async def get_products(output_dir: str = Query("./output")):
+    """Load extracted product data from local products.json file."""
+    resolved = Path(output_dir).expanduser().resolve()
+    file_path = resolved / "products.json"
+    if file_path.exists() and file_path.is_file():
+        try:
+            return {"ok": True, "products": _json.loads(file_path.read_text(encoding="utf-8"))}
+        except Exception as e:
+            return {"ok": False, "error": f"Failed to parse products.json: {e}"}
+    return {"ok": True, "products": []}
+
+
+@app.websocket("/api/ws/product-crawl")
+async def ws_product_crawl(websocket: WebSocket):
+    """WebSocket endpoint for real-time product crawl streaming."""
+    await websocket.accept()
+    try:
+        # 1. Receive crawl config
+        data = await websocket.receive_json()
+        
+        urls = data.get("urls", [])
+        if isinstance(urls, str):
+            urls = [u.strip() for u in urls.splitlines() if u.strip()]
+        
+        if not urls:
+            await websocket.send_json({"event": "error", "data": {"message": "At least one URL is required"}})
+            await websocket.close()
+            return
+            
+        output_dir = data.get("output_dir", "./output").strip()
+        max_products = int(data.get("max_products", 50))
+        proxy = data.get("proxy", None)
+        if proxy and isinstance(proxy, str):
+            proxy = proxy.strip() or None
+        else:
+            proxy = None
+
+        # Load backup proxies
+        backup_proxies: list[str] = []
+        if proxy:
+            backup_proxies.append(proxy)
+        _proxies_file = _get_proxies_file_path()
+        if _proxies_file and _proxies_file.exists():
+            try:
+                for line in _proxies_file.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if line and not line.startswith("#") and line not in backup_proxies:
+                        backup_proxies.append(line)
+            except Exception:
+                pass
+
+        # Queue for WebSocket streaming
+        queue = asyncio.Queue()
+
+        def on_progress(event: str, event_data: Dict[str, Any]):
+            asyncio.get_event_loop().call_soon_threadsafe(queue.put_nowait, (event, event_data))
+
+        async def event_sender():
+            while True:
+                event, edata = await queue.get()
+                if event is None:
+                    queue.task_done()
+                    break
+                try:
+                    await websocket.send_json({"event": event, "data": edata})
+                except Exception:
+                    break
+                finally:
+                    queue.task_done()
+
+        sender_task = asyncio.create_task(event_sender())
+
+        pipeline = ProductCrawlPipeline(
+            urls=urls,
+            output_dir=output_dir,
+            max_products=max_products,
+            proxies=backup_proxies,
+            on_progress=on_progress
+        )
+
+        try:
+            await pipeline.run()
+        except Exception as e:
+            logger.error("Product crawl pipeline error: %s", e)
+            await websocket.send_json({"event": "error", "data": {"message": str(e)}})
+        finally:
+            await queue.put((None, None))
+            await sender_task
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected")
+    except Exception as e:
+        logger.error("WebSocket server error: %s", e)
+        try:
+            await websocket.send_json({"event": "error", "data": {"message": str(e)}})
+        except Exception:
+            pass
+    finally:
+        try:
+            await websocket.close()
+        except Exception:
+            pass
+
 
 # ── Batch Import Endpoints ─────────────────────────────────────────────
 

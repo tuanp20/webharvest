@@ -89,3 +89,40 @@ class CrawlResult:
     download_result: Optional[DownloadResult] = None
     total_pages: int = 0
     errors: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ProductVariant:
+    """A variation of a product (e.g. combination of color and size)."""
+
+    color: Optional[str] = None
+    size: Optional[str] = None
+    price: Optional[float] = None
+    sku: Optional[str] = None
+    in_stock: bool = True
+    image_url: Optional[str] = None
+
+
+@dataclass
+class ProductData:
+    """Extracted catalog product information."""
+
+    title: str
+    url: str
+    source_site: str
+    main_image_url: Optional[str] = None
+    price: Optional[float] = None
+    currency: str = "USD"
+    description: Optional[str] = None
+    category: Optional[str] = None
+    variants: list[ProductVariant] = field(default_factory=list)
+    colors: list[str] = field(default_factory=list)
+    sizes: list[str] = field(default_factory=list)
+    brand: Optional[str] = None
+    rating: Optional[float] = None
+    review_count: Optional[int] = None
+    tags: list[str] = field(default_factory=list)
+    additional_images: list[str] = field(default_factory=list)
+    crawled_at: Optional[str] = None
+    raw_json: Optional[dict] = None
+

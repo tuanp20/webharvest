@@ -138,6 +138,10 @@ def build(onefile: bool = False) -> None:
         "rich.console",
         "rich.progress",
         "typing_extensions",
+        # --- UI framework & .NET bridge ---
+        "webview",
+        "clr",
+        "pythonnet",
     ]
 
     # --- Collect-all: ensures ALL submodules + data files are bundled ---
@@ -158,6 +162,9 @@ def build(onefile: bool = False) -> None:
         "hyperframe",
         "wsproto",
         "socksio",
+        "webview",
+        "clr",
+        "pythonnet",
     ]
 
     # --- Collect data files ---
@@ -180,9 +187,8 @@ def build(onefile: bool = False) -> None:
     else:
         cmd.append("--onedir")
 
-    # Console mode — keep console visible for error debugging
-    # The app writes logs to WebHarvest.log and shows native error dialogs
-    cmd.append("--console")
+    # Console mode — run without console window to hide the command prompt (cmd)
+    cmd.append("--noconsole")
 
     # Icon
     icon = _get_icon_path()

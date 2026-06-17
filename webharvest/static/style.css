@@ -1433,3 +1433,36 @@ select:focus {
   margin-left: 4px;
 }
 
+/* --- Products Table Premium Styling --- */
+.products-table th {
+  color: var(--apple-ink-muted);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--apple-hairline-light);
+}
+
+.products-table td {
+  border-bottom: 1px solid var(--apple-hairline);
+  font-size: 13.5px;
+  vertical-align: middle;
+}
+
+.products-table tr:hover {
+  background-color: var(--apple-tile-dark-2);
+}
+
+.url-domain-chip {
+  display: inline-block;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: var(--apple-radius-pill);
+  color: var(--apple-ink-white-muted);
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+

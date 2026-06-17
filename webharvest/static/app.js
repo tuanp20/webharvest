@@ -7,6 +7,20 @@ const LICENSE_DATA_STORAGE = 'wh_license_data';
 let licenseData = null;  // {tier, limits, expires_at, ...}
 
 async function initLicenseGate() {
+    // Fetch device ID to display in the card
+    try {
+        const devInfoResp = await fetch('/api/device-id');
+        const devInfo = await devInfoResp.json();
+        if (devInfo.device_id) {
+            const deviceIdEl = document.getElementById('display-device-id');
+            const deviceNameEl = document.getElementById('display-device-name');
+            if (deviceIdEl) deviceIdEl.textContent = devInfo.device_id;
+            if (deviceNameEl) deviceNameEl.textContent = devInfo.device_name || 'N/A';
+        }
+    } catch (e) {
+        console.error('Failed to fetch device info:', e);
+    }
+
     const savedKey = localStorage.getItem(LICENSE_KEY_STORAGE);
     if (savedKey) {
         try {
@@ -20,6 +34,9 @@ async function initLicenseGate() {
                 licenseData = result.data;
                 localStorage.setItem(LICENSE_DATA_STORAGE, JSON.stringify(licenseData));
                 applyLicenseTier();
+                // Allow closing the modal since we have a valid license
+                const closeBtn = document.getElementById('btn-close-license');
+                if (closeBtn) closeBtn.style.display = 'block';
                 hideLicenseGate();
                 return;
             }
@@ -29,6 +46,8 @@ async function initLicenseGate() {
             if (cached) {
                 licenseData = JSON.parse(cached);
                 applyLicenseTier();
+                const closeBtn = document.getElementById('btn-close-license');
+                if (closeBtn) closeBtn.style.display = 'block';
                 hideLicenseGate();
                 return;
             }
@@ -42,11 +61,16 @@ async function initLicenseGate() {
             // Dev mode — no license server configured
             licenseData = { valid: true, tier: 'unlimited', limits: { batch_crawl: true, stealth_mode: true, proxy_support: true, max_daily_urls: 999999, max_concurrent: 20 } };
             applyLicenseTier();
+            const closeBtn = document.getElementById('btn-close-license');
+            if (closeBtn) closeBtn.style.display = 'block';
             hideLicenseGate();
             return;
         }
     } catch (e) { /* ignore */ }
 
+    // No valid key & server is configured -> force license gate open, hide close button
+    const closeBtn = document.getElementById('btn-close-license');
+    if (closeBtn) closeBtn.style.display = 'none';
     showLicenseGate();
 }
 
@@ -58,6 +82,20 @@ function showLicenseGate() {
 function hideLicenseGate() {
     const gate = document.getElementById('license-gate');
     if (gate) gate.style.display = 'none';
+}
+
+function showManageLicense() {
+    const savedKey = localStorage.getItem(LICENSE_KEY_STORAGE);
+    const input = document.getElementById('license-key-input');
+    if (input && savedKey) {
+        input.value = savedKey;
+    }
+    
+    // Enable close button in case they want to return to the app
+    const closeBtn = document.getElementById('btn-close-license');
+    if (closeBtn) closeBtn.style.display = 'block';
+    
+    showLicenseGate();
 }
 
 function applyLicenseTier() {
@@ -77,26 +115,63 @@ function applyLicenseTier() {
         if (licenseData.expires_at) {
             const exp = new Date(licenseData.expires_at);
             badge.title = `Hết hạn: ${exp.toLocaleDateString('vi-VN')}`;
+        } else {
+            badge.title = 'Không giới hạn';
         }
     }
 
-    // Disable batch crawl for Basic
+    // Disable/Enable batch crawl mode selection based on limits
     if (!limits.batch_crawl) {
         document.querySelectorAll('.mode-btn[data-mode="batch"]').forEach(btn => {
             btn.classList.add('tier-locked');
             btn.title = 'Nâng cấp lên Pro để sử dụng Batch Crawl';
         });
+    } else {
+        document.querySelectorAll('.mode-btn[data-mode="batch"]').forEach(btn => {
+            btn.classList.remove('tier-locked');
+            btn.title = '';
+        });
     }
 
-    // Disable stealth/proxy for Basic
+    // Disable stealth/proxy options in Fetcher select for Basic
     const fetcherSelect = document.getElementById('fetcher');
     if (fetcherSelect && limits.allowed_fetchers) {
         Array.from(fetcherSelect.options).forEach(opt => {
             if (!limits.allowed_fetchers.includes(opt.value) && opt.value !== 'auto') {
                 opt.disabled = true;
-                opt.textContent += ' 🔒';
+                if (!opt.textContent.includes('🔒')) {
+                    opt.textContent += ' 🔒';
+                }
+            } else {
+                opt.disabled = false;
+                opt.textContent = opt.textContent.replace(' 🔒', '');
             }
         });
+    }
+
+    // Disable proxy selection options for Basic
+    const proxySelect = document.getElementById('proxy-provider');
+    if (proxySelect) {
+        if (!limits.proxy_support) {
+            Array.from(proxySelect.options).forEach(opt => {
+                if (opt.value !== 'none') {
+                    opt.disabled = true;
+                    if (!opt.textContent.includes('🔒')) {
+                        opt.textContent += ' 🔒';
+                    }
+                }
+            });
+            // Force reset to Local IP if currently set to locked proxy options
+            if (proxySelect.value !== 'none') {
+                proxySelect.value = 'none';
+                proxySelect.dispatchEvent(new Event('change'));
+            }
+        } else {
+            Array.from(proxySelect.options).forEach(opt => {
+                opt.disabled = false;
+                opt.textContent = opt.textContent.replace(' 🔒', '');
+            });
+        }
     }
 }
 
@@ -1042,3 +1117,241 @@ function closeBatchWs() {
 btnStop.addEventListener("click", () => {
     if (batchWs) { addLog("Đang dừng batch...", "warn"); batchWs.close(); }
 });
+
+// ══════════════════════════════════════════════════════════════
+// PRODUCT SCRAPER LOGIC
+// ══════════════════════════════════════════════════════════════
+
+let productWs = null;
+let crawledProducts = [];
+
+const productCrawlForm = document.getElementById("product-crawl-form");
+const btnProductStart = document.getElementById("btn-product-start");
+const btnProductStop = document.getElementById("btn-product-stop");
+const productStatusBadge = document.getElementById("product-status-badge");
+const productLogsViewer = document.getElementById("product-logs-viewer");
+const productTableBody = document.getElementById("product-table-body");
+const productResultCount = document.getElementById("product-result-count");
+
+const statProdTotal = document.getElementById("stat-prod-total");
+const statProdSuccess = document.getElementById("stat-prod-success");
+const statProdFailed = document.getElementById("stat-prod-failed");
+
+function addProductLog(message, type = "info") {
+    const time = new Date().toLocaleTimeString();
+    const logLine = document.createElement("div");
+    logLine.className = `log-line ${type}`;
+    logLine.textContent = `[${time}] ${message}`;
+    productLogsViewer.appendChild(logLine);
+    productLogsViewer.scrollTop = productLogsViewer.scrollHeight;
+}
+
+function renderProductsTable() {
+    productTableBody.innerHTML = "";
+    productResultCount.textContent = `${crawledProducts.length} sản phẩm`;
+    
+    if (crawledProducts.length === 0) {
+        productTableBody.innerHTML = `
+            <tr>
+                <td colspan="6" style="padding: 24px; text-align: center; color: var(--text-secondary);">Sản phẩm được cào sẽ hiển thị tại đây...</td>
+            </tr>
+        `;
+        return;
+    }
+    
+    crawledProducts.forEach((p, idx) => {
+        const row = document.createElement("tr");
+        row.style.borderBottom = "1px solid var(--border-color)";
+        
+        const imgTd = document.createElement("td");
+        imgTd.style.padding = "12px";
+        if (p.image) {
+            imgTd.innerHTML = `<img src="${p.image}" style="width: 48px; height: 48px; object-fit: cover; border-radius: 8px;" alt="${p.title}">`;
+        } else {
+            imgTd.innerHTML = `<div style="width: 48px; height: 48px; background: var(--border-color); border-radius: 8px; display: flex; align-items: center; justify-content: center;"><i data-lucide="image" style="width: 18px; color: var(--text-secondary);"></i></div>`;
+        }
+        
+        const titleTd = document.createElement("td");
+        titleTd.style.padding = "12px";
+        titleTd.innerHTML = `<div style="font-weight: 500;">${p.title || 'Không có tên'}</div><div style="font-size: 12px; color: var(--text-secondary); word-break: break-all;">${p.url}</div>`;
+        
+        const priceTd = document.createElement("td");
+        priceTd.style.padding = "12px";
+        priceTd.textContent = p.price !== null ? `${p.price.toLocaleString('vi-VN')} USD` : 'Chưa cập nhật';
+        
+        const siteTd = document.createElement("td");
+        siteTd.style.padding = "12px";
+        let domain = "generic";
+        try { domain = new URL(p.url).hostname.replace('www.', ''); } catch(e) {}
+        siteTd.innerHTML = `<span class="url-domain-chip" style="background: var(--bg-body); border: 1px solid var(--border-color);">${domain}</span>`;
+        
+        const variantsTd = document.createElement("td");
+        variantsTd.style.padding = "12px";
+        variantsTd.textContent = p.variants_count || 0;
+        
+        const actionTd = document.createElement("td");
+        actionTd.style.padding = "12px";
+        const btnDetail = document.createElement("button");
+        btnDetail.type = "button";
+        btnDetail.className = "btn-outline-sm btn-press";
+        btnDetail.style.padding = "4px 8px";
+        btnDetail.innerHTML = `<i data-lucide="eye" style="width: 14px; height: 14px; margin-right: 4px;"></i> Xem`;
+        btnDetail.addEventListener("click", () => {
+            alert(`Tên sản phẩm: ${p.title}\nGiá: ${p.price || 'N/A'}\nSố biến thể: ${p.variants_count || 0}`);
+        });
+        actionTd.appendChild(btnDetail);
+        
+        row.appendChild(imgTd);
+        row.appendChild(titleTd);
+        row.appendChild(priceTd);
+        row.appendChild(siteTd);
+        row.appendChild(variantsTd);
+        row.appendChild(actionTd);
+        
+        productTableBody.appendChild(row);
+    });
+    lucide.createIcons();
+}
+
+productCrawlForm.addEventListener("submit", (e) => {
+    e.preventDefault();
+    
+    const urlsRaw = document.getElementById("product-urls").value;
+    const urls = urlsRaw.split("\n").map(u => u.trim()).filter(u => u.length > 0);
+    
+    if (urls.length === 0) {
+        alert("Vui lòng nhập ít nhất một URL sản phẩm hoặc danh mục.");
+        return;
+    }
+    
+    const output_dir = document.getElementById("product-output-dir").value.trim();
+    const max_products = parseInt(document.getElementById("max-products").value) || 50;
+    const proxy = document.getElementById("product-proxy").value.trim();
+    
+    // UI Updates
+    btnProductStart.disabled = true;
+    btnProductStop.disabled = false;
+    productStatusBadge.textContent = "Đang chạy";
+    productStatusBadge.className = "badge badge-active";
+    
+    productLogsViewer.innerHTML = "";
+    crawledProducts = [];
+    renderProductsTable();
+    
+    // Reset Stats
+    statProdTotal.textContent = "0";
+    statProdSuccess.textContent = "0";
+    statProdFailed.textContent = "0";
+    
+    addProductLog(`Bắt đầu kết nối WebSocket và cào sản phẩm...`, "system");
+    
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const wsUrl = `${protocol}//${window.location.host}/api/ws/product-crawl`;
+    
+    productWs = new WebSocket(wsUrl);
+    
+    productWs.onopen = () => {
+        const payload = {
+            urls,
+            output_dir,
+            max_products,
+            proxy: proxy || null
+        };
+        productWs.send(JSON.stringify(payload));
+    };
+    
+    productWs.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        const eventType = msg.event;
+        const data = msg.data;
+        
+        switch (eventType) {
+            case "product_crawl_start":
+                addProductLog(`Bắt đầu chiến dịch cào catalog sản phẩm...`, "system");
+                break;
+                
+            case "fetch_page_start":
+                addProductLog(`Đang cào trang danh mục: ${data.url} (${data.fetcher})`, "info");
+                break;
+                
+            case "fetch_page_success":
+                addProductLog(`Cào thành công trang danh mục: ${data.url}`, "success");
+                break;
+                
+            case "fetch_page_failed":
+                addProductLog(`Cào trang danh mục thất bại: ${data.url} (Mã lỗi: ${data.status})`, "error");
+                statProdFailed.textContent = parseInt(statProdFailed.textContent) + 1;
+                break;
+                
+            case "listing_detected":
+                addProductLog(`Phát hiện trang danh mục, tìm thấy ${data.count} liên kết sản phẩm`, "info");
+                statProdTotal.textContent = data.count;
+                break;
+                
+            case "fetch_product_start":
+                addProductLog(`Đang tải trang sản phẩm chi tiết: ${data.url}`, "info");
+                break;
+                
+            case "fetch_product_failed":
+                addProductLog(`Tải trang sản phẩm thất bại: ${data.url} (Mã lỗi: ${data.status})`, "warn");
+                statProdFailed.textContent = parseInt(statProdFailed.textContent) + 1;
+                break;
+                
+            case "product_extracted":
+                addProductLog(`Cào thành công sản phẩm: ${data.title} (${data.price || 'N/A'})`, "success");
+                statProdSuccess.textContent = parseInt(statProdSuccess.textContent) + 1;
+                
+                crawledProducts.push(data);
+                renderProductsTable();
+                break;
+                
+            case "product_extraction_failed":
+                addProductLog(`Không thể phân tích dữ liệu sản phẩm: ${data.url} (${data.reason})`, "warn");
+                statProdFailed.textContent = parseInt(statProdFailed.textContent) + 1;
+                break;
+                
+            case "product_error":
+                addProductLog(`Lỗi khi xử lý sản phẩm: ${data.url} (${data.error})`, "warn");
+                statProdFailed.textContent = parseInt(statProdFailed.textContent) + 1;
+                break;
+                
+            case "product_crawl_done":
+                addProductLog(`Chiến dịch cào catalog sản phẩm hoàn thành! Tổng số sản phẩm đã lấy: ${data.count}`, "system");
+                closeProductWebSocket();
+                break;
+                
+            case "error":
+                addProductLog(`Lỗi hệ thống: ${data.message}`, "error");
+                closeProductWebSocket();
+                break;
+        }
+    };
+    
+    productWs.onerror = (err) => {
+        addProductLog(`Kết nối WebSocket gặp lỗi.`, "error");
+        closeProductWebSocket();
+    };
+    
+    productWs.onclose = () => {
+        addProductLog(`Đã đóng kết nối cào sản phẩm.`, "system");
+        closeProductWebSocket();
+    };
+});
+
+btnProductStop.addEventListener("click", () => {
+    if (productWs) {
+        addProductLog("Đang dừng cào sản phẩm theo yêu cầu...", "warn");
+        productWs.close();
+    }
+});
+
+function closeProductWebSocket() {
+    if (productWs) {
+        productWs = null;
+    }
+    btnProductStart.disabled = false;
+    btnProductStop.disabled = true;
+    productStatusBadge.textContent = "Đang dừng";
+    productStatusBadge.className = "badge badge-inactive";
+}
+

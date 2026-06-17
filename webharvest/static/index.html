@@ -23,14 +23,25 @@
             <h1>WebHarvest</h1>
             <p class="tagline">Trình cào và tải ảnh tự động</p>
         </div>
-        <span id="tier-badge" class="tier-badge" style="display:none"></span>
-        <div class="tabs">
-            <button class="tab-btn active" data-tab="scraper">
-                <i data-lucide="terminal"></i> Bộ cào dữ liệu
-            </button>
-            <button class="tab-btn" data-tab="gallery" id="btn-gallery-tab">
-                <i data-lucide="image"></i> Kho ảnh đã tải
-            </button>
+        <div class="header-right" style="display: flex; align-items: center; gap: 16px;">
+            <div id="license-info-header" style="display: flex; align-items: center; gap: 8px;">
+                <span id="tier-badge" class="tier-badge" style="display:none"></span>
+                <button type="button" id="btn-manage-license" class="btn-manage-license" onclick="showManageLicense()" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); color: #a1a1a6; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; border-radius: 6px; transition: all 0.2s;" title="Quản lý License Key">
+                    <i data-lucide="key" style="width: 13px; height: 13px;"></i>
+                    <span>License</span>
+                </button>
+            </div>
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="scraper">
+                    <i data-lucide="terminal"></i> Bộ cào dữ liệu
+                </button>
+                <button class="tab-btn" data-tab="product-scraper" id="btn-product-scraper-tab">
+                    <i data-lucide="shopping-bag"></i> Cào sản phẩm (Catalog)
+                </button>
+                <button class="tab-btn" data-tab="gallery" id="btn-gallery-tab">
+                    <i data-lucide="image"></i> Kho ảnh đã tải
+                </button>
+            </div>
         </div>
     </header>
 
@@ -392,6 +403,132 @@
                 </div>
             </section>
 
+            <!-- Product Scraper Tab -->
+            <section id="tab-product-scraper" class="tab-content">
+                <div class="grid-layout">
+                    <!-- Left Column: Config -->
+                    <div class="card config-card apple-animate">
+                        <div class="card-header">
+                            <i data-lucide="sliders"></i>
+                            <h2>Cấu hình cào sản phẩm</h2>
+                        </div>
+                        <form id="product-crawl-form" class="config-form">
+                            <div class="form-group">
+                                <label for="product-urls">URL sản phẩm / Danh mục</label>
+                                <div class="input-with-icon" style="position: relative;">
+                                    <i data-lucide="link" style="position: absolute; left: 12px; top: 12px;"></i>
+                                    <textarea id="product-urls" placeholder="Nhập một hoặc nhiều URL (mỗi URL một dòng)...&#10;Ví dụ: https://printify.com/app/products" rows="4" style="width: 100%; border-radius: 12px; border: 1px solid var(--border-color); padding: 12px 12px 12px 40px; background: var(--bg-card); color: var(--text-primary); font-family: inherit; resize: vertical; box-sizing: border-box;"></textarea>
+                                </div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="product-output-dir">Thư mục lưu trữ</label>
+                                <div class="input-with-icon">
+                                    <i data-lucide="folder"></i>
+                                    <input type="text" id="product-output-dir" required placeholder="./output_products" value="./output_products">
+                                </div>
+                            </div>
+
+                            <div class="form-grid">
+                                <div class="form-group">
+                                    <label for="max-products">Số lượng tối đa</label>
+                                    <input type="number" id="max-products" min="1" max="10000" value="50">
+                                </div>
+                                <div class="form-group">
+                                    <label for="product-proxy">Proxy thủ công (tùy chọn)</label>
+                                    <input type="text" id="product-proxy" placeholder="http://user:pass@host:port">
+                                </div>
+                            </div>
+
+                            <div class="action-buttons">
+                                <button type="submit" id="btn-product-start" class="btn btn-primary btn-press">
+                                    <i data-lucide="play"></i> Bắt đầu cào
+                                </button>
+                                <button type="button" id="btn-product-stop" class="btn btn-danger btn-press" disabled>
+                                    <i data-lucide="square"></i> Dừng
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Right Column: Status & Realtime Logs -->
+                    <div class="right-column">
+                        <!-- Stats Grid -->
+                        <div class="stats-grid apple-animate">
+                            <div class="stat-card">
+                                <div class="stat-icon icon-blue">
+                                    <i data-lucide="shopping-bag"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-label">Tổng sản phẩm</span>
+                                    <span class="stat-value" id="stat-prod-total">0</span>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon icon-green">
+                                    <i data-lucide="check-circle"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-label">Thành công</span>
+                                    <span class="stat-value" id="stat-prod-success">0</span>
+                                </div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-icon icon-red">
+                                    <i data-lucide="alert-triangle"></i>
+                                </div>
+                                <div class="stat-info">
+                                    <span class="stat-label">Lỗi</span>
+                                    <span class="stat-value" id="stat-prod-failed">0</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Realtime Logs -->
+                        <div class="card logs-card apple-animate">
+                            <div class="card-header">
+                                <div class="title-with-badge">
+                                    <i data-lucide="activity"></i>
+                                    <h2>Trạng thái thời gian thực</h2>
+                                </div>
+                                <div id="product-status-badge" class="badge badge-inactive">Đang dừng</div>
+                            </div>
+                            <div class="logs-container" id="product-logs-viewer">
+                                <div class="log-line system">Sẵn sàng cào sản phẩm. Nhập URL và nhấn "Bắt đầu cào"...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Crawled Products Result Grid -->
+                <div class="card gallery-card apple-animate" style="margin-top: 24px;">
+                    <div class="card-header">
+                        <i data-lucide="database"></i>
+                        <h2>Sản phẩm đã cào</h2>
+                        <span class="counter" id="product-result-count">0 sản phẩm</span>
+                    </div>
+                    <div class="products-grid-container" style="overflow-x: auto; padding: 16px;">
+                        <table class="products-table" style="width: 100%; border-collapse: collapse; text-align: left; color: var(--text-primary);">
+                            <thead>
+                                <tr style="border-bottom: 2px solid var(--border-color); font-weight: 600;">
+                                    <th style="padding: 12px; width: 80px;">Ảnh chính</th>
+                                    <th style="padding: 12px;">Tên sản phẩm</th>
+                                    <th style="padding: 12px; width: 100px;">Giá</th>
+                                    <th style="padding: 12px; width: 120px;">Site</th>
+                                    <th style="padding: 12px; width: 100px;">Biến thể</th>
+                                    <th style="padding: 12px; width: 100px;">Chi tiết</th>
+                                </tr>
+                            </thead>
+                            <tbody id="product-table-body">
+                                <tr>
+                                    <td colspan="6" style="padding: 24px; text-align: center; color: var(--text-secondary);">Sản phẩm được cào sẽ hiển thị tại đây...</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
             <!-- Gallery / History Tab -->
             <section id="tab-gallery" class="tab-content">
                 <div class="gallery-controls-card card apple-animate">
@@ -438,7 +575,8 @@
 
     <!-- License Gate Overlay -->
     <div id="license-gate" class="license-gate" style="display:none">
-        <div class="license-gate-card">
+        <div class="license-gate-card" style="position: relative;">
+            <button type="button" id="btn-close-license" class="close-license" onclick="hideLicenseGate()" style="display:none; position: absolute; top: 15px; right: 20px; background: none; border: none; color: #a1a1a6; font-size: 28px; cursor: pointer; line-height: 1;" title="Đóng">&times;</button>
             <div class="license-logo">
                 <i data-lucide="sprout" style="width:48px;height:48px;color:#6366f1"></i>
                 <h2>WebHarvest License</h2>
@@ -464,6 +602,10 @@
                     <span class="plan-name">💎 Unlimited</span>
                     <span class="plan-price">899,000đ/tháng</span>
                 </button>
+            </div>
+            <div class="device-id-display" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--apple-hairline); text-align: center; font-size: 11px; color: #a1a1a6;">
+                <div style="margin-bottom: 4px;">Thiết bị: <span id="display-device-name" style="font-weight: 500;">Đang tải...</span></div>
+                <div>Device ID: <span id="display-device-id" style="font-family: monospace; font-weight: 500; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; user-select: all;">Đang tải...</span></div>
             </div>
         </div>
     </div>

@@ -19,6 +19,24 @@ import traceback
 from pathlib import Path
 
 # ---------------------------------------------------------------------------
+# Safe standard streams for --noconsole mode on Windows
+# ---------------------------------------------------------------------------
+class NullWriter:
+    def write(self, text: str) -> int:
+        return len(text)
+    def flush(self) -> None:
+        pass
+    def isatty(self) -> bool:
+        return False
+    def fileno(self) -> int:
+        return -1
+
+if sys.stdout is None:
+    sys.stdout = NullWriter()
+if sys.stderr is None:
+    sys.stderr = NullWriter()
+
+# ---------------------------------------------------------------------------
 # PyInstaller compatibility: resolve the correct base path for bundled assets
 # ---------------------------------------------------------------------------
 if getattr(sys, "frozen", False):
@@ -38,14 +56,18 @@ if not getattr(sys, "frozen", False):
 # ---------------------------------------------------------------------------
 LOG_FILE = APP_DIR / "WebHarvest.log"
 
+handlers: list[logging.Handler] = [
+    logging.FileHandler(str(LOG_FILE), encoding="utf-8", mode="w")
+]
+# Only log to stdout/console if running with an active terminal console
+if sys.__stdout__ is not None:
+    handlers.append(logging.StreamHandler(sys.stdout))
+
 logging.basicConfig(
     level=logging.INFO,
     format="[%(asctime)s] [%(levelname)s] %(name)s: %(message)s",
     datefmt="%Y-%m-%d %H:%M:%S",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(str(LOG_FILE), encoding="utf-8", mode="w"),
-    ],
+    handlers=handlers,
 )
 logger = logging.getLogger("webharvest.desktop")
 logger.info("WebHarvest Desktop starting...")
