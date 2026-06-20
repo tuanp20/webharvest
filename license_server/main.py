@@ -18,7 +18,7 @@ from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from pathlib import Path
@@ -30,11 +30,14 @@ from .config import (
 )
 from .license import generate_key, is_valid_key_format, ValidationResult, generate_order_code
 from .payos_service import PayOSService, PayOSError
+from .proxy_service import DataImpulseProxyService
+from .email_service import send_license_email
 
 logger = logging.getLogger("license.server")
 
 settings: Settings = None
 payos: PayOSService = None
+proxy_svc: DataImpulseProxyService = None
 
 # Simple admin token store (in-memory, reset on restart)
 _admin_tokens: set[str] = set()
@@ -43,7 +46,7 @@ _admin_tokens: set[str] = set()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup/shutdown lifecycle."""
-    global settings, payos
+    global settings, payos, proxy_svc
 
     settings = Settings.from_env()
     await db.init_db(settings.database_url)
@@ -52,6 +55,13 @@ async def lifespan(app: FastAPI):
         client_id=settings.payos_client_id,
         api_key=settings.payos_api_key,
         checksum_key=settings.payos_checksum_key,
+    )
+
+    # Initialize DataImpulse proxy service
+    proxy_svc = DataImpulseProxyService(
+        username=settings.di_username,
+        password=settings.di_password,
+        default_country=settings.di_default_country,
     )
 
     # Confirm webhook URL with PayOS
@@ -175,6 +185,7 @@ async def activate_license(req: ActivateRequest, request: Request):
             return JSONResponse(status_code=403, content={"success": False, "error": "Key is bound to another device", "error_code": "DEVICE_MISMATCH"})
         if existing["status"] in ("expired", "revoked"):
             return JSONResponse(status_code=403, content={"success": False, "error": f"Key is {existing['status']}", "error_code": existing["status"].upper()})
+        return JSONResponse(status_code=400, content={"success": False, "error": "Activation failed", "error_code": "ACTIVATION_FAILED"})
 
     tier_cfg = get_tier_config(result["tier"])
     await db.log_request(key_id=result["id"], action="activate", status="success",
@@ -191,6 +202,36 @@ async def activate_license(req: ActivateRequest, request: Request):
             "limits": tier_to_dict(result["tier"]),
         },
     }
+
+
+# ── License Deactivation ─────────────────────────────────────────────────
+
+class DeactivateRequest(BaseModel):
+    key: str
+    device_id: str
+
+
+@app.post("/api/license/deactivate")
+async def deactivate_license(req: DeactivateRequest, request: Request):
+    if not is_valid_key_format(req.key):
+        return JSONResponse(status_code=400, content={"success": False, "error": "Invalid key format", "error_code": "INVALID_FORMAT"})
+
+    result = await db.deactivate_key_device(req.key, req.device_id)
+    if not result:
+        existing = await db.get_key_by_key(req.key)
+        if not existing:
+            await db.log_request(action="deactivate", status="error", error_message="Key not found",
+                                 ip_address=_get_client_ip(request), device_id=req.device_id)
+            return JSONResponse(status_code=404, content={"success": False, "error": "Key not found", "error_code": "NOT_FOUND"})
+
+        await db.log_request(key_id=existing["id"], action="deactivate", status="error",
+                             error_message="Deactivation failed: Device mismatch or status not active",
+                             ip_address=_get_client_ip(request), device_id=req.device_id)
+        return JSONResponse(status_code=403, content={"success": False, "error": "Device mismatch or status not active", "error_code": "DEACTIVATE_FAILED"})
+
+    await db.log_request(key_id=result["id"], action="deactivate", status="success",
+                         ip_address=_get_client_ip(request), device_id=req.device_id)
+    return {"success": True, "message": "License unbound successfully"}
 
 
 # ── License Validation ───────────────────────────────────────────────────
@@ -271,7 +312,7 @@ async def validate_license(req: ValidateRequest, request: Request):
         max_concurrent=tier_cfg.max_concurrent if tier_cfg else 1,
         batch_crawl=tier_cfg.batch_crawl if tier_cfg else False,
         stealth_mode=tier_cfg.stealth_mode if tier_cfg else False,
-        proxy_support=tier_cfg.proxy_support if tier_cfg else False,
+        proxy_quota_gb=tier_cfg.proxy_quota_gb if tier_cfg else 0,
         allowed_fetchers=tier_cfg.allowed_fetchers if tier_cfg else ["static"],
         daily_urls_used=daily_used,
         daily_urls_remaining=max(0, max_daily - daily_used),
@@ -320,6 +361,96 @@ async def rebind_license(req: RebindRequest, request: Request):
         raise HTTPException(status_code=404, detail="Key not found or not active")
 
     return {"success": True, "data": _serialize_row(result)}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+#  PROXY API — Centralized Proxy Management (DataImpulse)
+# ══════════════════════════════════════════════════════════════════════════
+
+class ProxyAcquireRequest(BaseModel):
+    key: str
+    device_id: str
+    target_url: str = ""
+    country: str = ""
+
+
+@app.post("/api/proxy/acquire")
+async def proxy_acquire(req: ProxyAcquireRequest, request: Request):
+    """Acquire a proxy session for crawling. Returns proxy URL or fallback signal."""
+    # Validate license
+    key_row = await db.validate_key(req.key, req.device_id)
+    if not key_row:
+        return {"success": False, "error": "Invalid or expired license", "fallback_local": True}
+
+    # Acquire proxy session
+    session = await proxy_svc.acquire_session(
+        license_key=req.key,
+        tier=key_row["tier"],
+        target_url=req.target_url,
+        country=req.country,
+        db_module=db,
+    )
+
+    if not session:
+        # No proxy available — signal client to use local IP
+        return {
+            "success": True,
+            "proxy_url": None,
+            "fallback_local": True,
+            "reason": "Proxy quota exhausted or service unavailable",
+        }
+
+    return {
+        "success": True,
+        "proxy_url": session.proxy_url,
+        "session_id": session.session_id,
+        "ttl": session.ttl_seconds,
+        "fallback_local": False,
+        "quota_remaining_gb": round(session.quota_remaining_bytes / 1_073_741_824, 3),
+    }
+
+
+class ProxyReleaseRequest(BaseModel):
+    session_id: str
+    bytes_used: int = 0
+    status: str = "success"  # 'success', 'fail', 'timeout', 'blocked'
+
+
+@app.post("/api/proxy/release")
+async def proxy_release(req: ProxyReleaseRequest):
+    """Release a proxy session and report bandwidth usage."""
+    result = await proxy_svc.release_session(
+        session_id=req.session_id,
+        bytes_used=req.bytes_used,
+        status=req.status,
+        db_module=db,
+    )
+    return {"success": result}
+
+
+@app.get("/api/proxy/quota")
+async def proxy_quota(key: str = Query(...), device_id: str = Query(...)):
+    """Get proxy bandwidth quota for a license key."""
+    key_row = await db.validate_key(key, device_id)
+    if not key_row:
+        return {"success": False, "error": "Invalid or expired license"}
+
+    quota_info = await proxy_svc.get_quota(
+        license_key=key,
+        tier=key_row["tier"],
+        db_module=db,
+    )
+
+    return {
+        "success": True,
+        "data": {
+            "quota_gb": quota_info.quota_gb,
+            "used_gb": quota_info.used_gb,
+            "remaining_gb": quota_info.remaining_gb,
+            "month": quota_info.month,
+            "configured": proxy_svc.is_configured,
+        },
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -413,6 +544,17 @@ async def payment_webhook(request: Request):
             result = await db.settle_payment(order_code, verified_data, new_key)
             if result:
                 logger.info("Payment settled: order=%d key=%s", order_code, result.get("key", "extended"))
+                if result.get("owner_email"):
+                    asyncio.create_task(
+                        send_license_email(
+                            settings,
+                            result["owner_email"],
+                            result.get("owner_name") or "Quý khách",
+                            result["key"],
+                            result["tier"].capitalize(),
+                            result["duration_months"]
+                        )
+                    )
         else:
             await db.cancel_transaction(order_code)
 
@@ -458,6 +600,17 @@ async def verify_pending(req: VerifyPendingRequest):
         new_key = generate_key()
         result = await db.settle_payment(req.order_code, payos_info, new_key)
         if result:
+            if result.get("owner_email"):
+                asyncio.create_task(
+                    send_license_email(
+                        settings,
+                        result["owner_email"],
+                        result.get("owner_name") or "Quý khách",
+                        result["key"],
+                        result["tier"].capitalize(),
+                        result["duration_months"]
+                    )
+                )
             return {"success": True, "data": {"status": "paid", "key": result["key"],
                                                "tier": result["tier"], "just_confirmed": True}}
         # Already settled by webhook
@@ -622,6 +775,30 @@ async def admin_revenue(
     return {"success": True, "data": [_serialize_row(r) for r in report]}
 
 
+@app.get("/api/admin/proxy/stats")
+async def admin_proxy_stats(_token: str = Depends(_require_admin)):
+    """Get proxy service statistics for admin dashboard."""
+    stats = await proxy_svc.get_admin_stats(db_module=db)
+    return {"success": True, "data": stats}
+
+
+@app.get("/api/admin/proxy/sessions")
+async def admin_proxy_sessions(
+    license_key: str = None, status: str = None,
+    page: int = 1, limit: int = 50,
+    _token: str = Depends(_require_admin),
+):
+    """List proxy session history."""
+    sessions, total = await db.get_proxy_sessions(
+        license_key=license_key, status=status, page=page, limit=limit,
+    )
+    return {
+        "success": True,
+        "data": [_serialize_row(s) for s in sessions],
+        "meta": {"page": page, "limit": limit, "total": total},
+    }
+
+
 # ── Serve Admin Dashboard ─────────────────────────────────────────────────
 
 _static_dir = Path(__file__).parent / "static"
@@ -636,6 +813,51 @@ async def admin_page():
     return HTMLResponse("<h1>Admin dashboard not found</h1>")
 
 
+@app.get("/", response_class=HTMLResponse)
+async def landing_page():
+    index = _static_dir / "index.html"
+    if index.exists():
+        return HTMLResponse(index.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>WebHarvest License Server is running</h1>")
+
+
+@app.get("/return", response_class=HTMLResponse)
+@app.get("/return.html", response_class=HTMLResponse)
+async def return_page():
+    ret_file = _static_dir / "return.html"
+    if ret_file.exists():
+        return HTMLResponse(ret_file.read_text(encoding="utf-8"))
+    return HTMLResponse("<h1>Return page not found</h1>")
+
+
+@app.get("/download/win")
+async def download_windows():
+    setup_path = _static_dir / "downloads" / "WebHarvest_Setup.exe"
+    if not setup_path.exists():
+        setup_path.parent.mkdir(parents=True, exist_ok=True)
+        setup_path.write_text("Mock WebHarvest Windows Executable Setup Placeholder", encoding="utf-8")
+    return FileResponse(
+        str(setup_path),
+        media_type="application/octet-stream",
+        filename="WebHarvest_Setup.exe"
+    )
+
+
+@app.get("/download/mac")
+async def download_macos():
+    setup_path = _static_dir / "downloads" / "WebHarvest_Setup.dmg"
+    if not setup_path.exists():
+        setup_path.parent.mkdir(parents=True, exist_ok=True)
+        setup_path.write_text("Mock WebHarvest macOS Disk Image Setup Placeholder", encoding="utf-8")
+    return FileResponse(
+        str(setup_path),
+        media_type="application/octet-stream",
+        filename="WebHarvest_Setup.dmg"
+    )
+
+
 # Mount static files
-if _static_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
+if not _static_dir.exists():
+    _static_dir.mkdir(parents=True, exist_ok=True)
+
+app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")

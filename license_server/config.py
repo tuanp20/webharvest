@@ -21,7 +21,9 @@ class TierConfig:
     allowed_fetchers: List[str]
     batch_crawl: bool
     stealth_mode: bool
-    proxy_support: bool
+    proxy_quota_gb: float         # Monthly proxy bandwidth quota in GB
+    proxy_session_ttl: int        # Proxy session TTL in seconds
+    max_concurrent_proxy: int     # Max concurrent proxy sessions
 
 
 TIERS: Dict[str, TierConfig] = {
@@ -32,7 +34,9 @@ TIERS: Dict[str, TierConfig] = {
         allowed_fetchers=["auto", "static"],
         batch_crawl=False,
         stealth_mode=False,
-        proxy_support=False,
+        proxy_quota_gb=1.0,
+        proxy_session_ttl=120,
+        max_concurrent_proxy=1,
     ),
     "pro": TierConfig(
         name="Pro",
@@ -41,7 +45,9 @@ TIERS: Dict[str, TierConfig] = {
         allowed_fetchers=["auto", "static", "dynamic", "stealth"],
         batch_crawl=True,
         stealth_mode=True,
-        proxy_support=True,
+        proxy_quota_gb=10.0,
+        proxy_session_ttl=300,
+        max_concurrent_proxy=3,
     ),
     "unlimited": TierConfig(
         name="Unlimited",
@@ -50,7 +56,9 @@ TIERS: Dict[str, TierConfig] = {
         allowed_fetchers=["auto", "static", "dynamic", "stealth"],
         batch_crawl=True,
         stealth_mode=True,
-        proxy_support=True,
+        proxy_quota_gb=50.0,
+        proxy_session_ttl=600,
+        max_concurrent_proxy=5,
     ),
 }
 
@@ -59,9 +67,9 @@ TIERS: Dict[str, TierConfig] = {
 # Discounts: 3mo → -10%, 6mo → -15%, 12mo → -20%
 
 PRICING: Dict[str, Dict[int, int]] = {
-    "basic":     {1: 99_000,  3: 267_300,  6: 504_900,  12: 950_400},
-    "pro":       {1: 499_000, 3: 1_347_300, 6: 2_544_900, 12: 4_790_400},
-    "unlimited": {1: 899_000, 3: 2_427_300, 6: 4_585_900, 12: 8_630_400},
+    "basic":     {1: 149_000,  3: 402_300,  6: 759_900,   12: 1_430_400},
+    "pro":       {1: 699_000,  3: 1_887_300, 6: 3_564_900, 12: 6_710_400},
+    "unlimited": {1: 1_499_000, 3: 4_047_300, 6: 7_649_900, 12: 14_390_400},
 }
 
 DURATION_LABELS: Dict[int, str] = {
@@ -97,8 +105,20 @@ class Settings:
     payos_checksum_key: str = ""
     payos_webhook_url: str = ""
 
+    # DataImpulse Proxy
+    di_username: str = ""
+    di_password: str = ""
+    di_default_country: str = ""
+
     # Admin
     admin_password: str = "admin"  # MUST be changed in production
+
+    # SMTP
+    smtp_host: str = "smtp.gmail.com"
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
 
     # Server
     host: str = "0.0.0.0"
@@ -122,7 +142,15 @@ class Settings:
             payos_api_key=os.getenv("PAYOS_API_KEY", ""),
             payos_checksum_key=os.getenv("PAYOS_CHECKSUM_KEY", ""),
             payos_webhook_url=os.getenv("PAYOS_WEBHOOK_URL", ""),
+            di_username=os.getenv("DI_USERNAME", ""),
+            di_password=os.getenv("DI_PASSWORD", ""),
+            di_default_country=os.getenv("DI_DEFAULT_COUNTRY", ""),
             admin_password=os.getenv("ADMIN_PASSWORD", "admin"),
+            smtp_host=os.getenv("SMTP_HOST", "smtp.gmail.com"),
+            smtp_port=int(os.getenv("SMTP_PORT", "587")),
+            smtp_username=os.getenv("SMTP_USERNAME", ""),
+            smtp_password=os.getenv("SMTP_PASSWORD", ""),
+            smtp_from_email=os.getenv("SMTP_FROM_EMAIL", ""),
             host=os.getenv("HOST", "0.0.0.0"),
             port=int(os.getenv("PORT", "8443")),
             debug=os.getenv("DEBUG", "").lower() in ("1", "true", "yes"),
@@ -152,7 +180,9 @@ def tier_to_dict(tier: str) -> dict | None:
         "allowed_fetchers": tc.allowed_fetchers,
         "batch_crawl": tc.batch_crawl,
         "stealth_mode": tc.stealth_mode,
-        "proxy_support": tc.proxy_support,
+        "proxy_quota_gb": tc.proxy_quota_gb,
+        "proxy_session_ttl": tc.proxy_session_ttl,
+        "max_concurrent_proxy": tc.max_concurrent_proxy,
     }
 
 
@@ -172,7 +202,7 @@ def packages_list() -> list[dict]:
                     "max_concurrent": tier_cfg.max_concurrent,
                     "batch_crawl": tier_cfg.batch_crawl,
                     "stealth_mode": tier_cfg.stealth_mode,
-                    "proxy_support": tier_cfg.proxy_support,
+                    "proxy_quota_gb": tier_cfg.proxy_quota_gb,
                 },
             })
     return result

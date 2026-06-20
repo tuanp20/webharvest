@@ -60,6 +60,40 @@ def _get_settings_path() -> Path:
     return Path(__file__).parent.parent / "webharvest_settings.json"
 
 
+def _save_license_key_to_settings(key: str):
+    """Write license key to settings so server internal tasks can load it."""
+    try:
+        path = _get_settings_path()
+        sdata = {}
+        if path.exists():
+            try:
+                sdata = _json.loads(path.read_text(encoding="utf-8"))
+            except Exception:
+                pass
+        sdata["license_key"] = key
+        path.write_text(_json.dumps(sdata, indent=2, ensure_ascii=False), encoding="utf-8")
+        logger.info("Saved license key to settings")
+    except Exception as e:
+        logger.warning("Failed to save license key to settings: %s", e)
+
+
+def _remove_license_key_from_settings():
+    """Remove license key from settings on deactivation."""
+    try:
+        path = _get_settings_path()
+        if path.exists():
+            try:
+                sdata = _json.loads(path.read_text(encoding="utf-8"))
+                if "license_key" in sdata:
+                    del sdata["license_key"]
+                    path.write_text(_json.dumps(sdata, indent=2, ensure_ascii=False), encoding="utf-8")
+                    logger.info("Removed license key from settings")
+            except Exception:
+                pass
+    except Exception as e:
+        logger.warning("Failed to remove license key from settings: %s", e)
+
+
 # ── License Validation Layer ──────────────────────────────────────────────
 
 try:
@@ -97,7 +131,7 @@ def _generate_device_id() -> str:
     except Exception:
         pass
     raw = "|".join(parts)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()[:32]
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _get_device_name() -> str:
@@ -114,7 +148,7 @@ async def validate_license(key: str, device_id: str, action: str = "validate") -
         # No license server configured → free mode (development)
         return {"valid": True, "tier": "unlimited", "limits": {
             "max_daily_urls": 999999, "max_concurrent": 20,
-            "batch_crawl": True, "stealth_mode": True, "proxy_support": True,
+            "batch_crawl": True, "stealth_mode": True, "proxy_quota_gb": 50.0,
             "allowed_fetchers": ["auto", "static", "dynamic", "stealth"],
         }}
 
@@ -138,6 +172,7 @@ async def validate_license(key: str, device_id: str, action: str = "validate") -
                 _license_cache[cache_key] = {"data": data, "cached_at": time.time()}
                 # Save to disk for offline grace
                 _save_license_cache(key, device_id, data)
+                _save_license_key_to_settings(key)
                 return data
             else:
                 # Server reachable but validation failed
@@ -212,6 +247,7 @@ class LicenseActivateBody(BaseModel):
 async def activate_license_local(body: LicenseActivateBody):
     """Activate a license key from the desktop app."""
     if not LICENSE_SERVER_URL:
+        _save_license_key_to_settings(body.key)
         return {"success": True, "data": {"tier": "unlimited", "message": "Dev mode"}}
 
     device_id = _generate_device_id()
@@ -230,8 +266,53 @@ async def activate_license_local(body: LicenseActivateBody):
                 vdata["valid"] = True
                 _license_cache[f"{body.key}:{device_id}"] = {"data": vdata, "cached_at": time.time()}
                 _save_license_cache(body.key, device_id, vdata)
+                _save_license_key_to_settings(body.key)
                 return data
             return {"success": False, "error": data.get("error", "Activation failed"),
+                    "error_code": data.get("error_code", "UNKNOWN")}
+    except _httpx.RequestError as e:
+        return {"success": False, "error": f"Cannot reach license server: {e}", "error_code": "UNREACHABLE"}
+
+
+@app.post("/api/license/deactivate-local")
+async def deactivate_license_local(body: LicenseActivateBody):
+    """Deactivate current license and clear local binding."""
+    if not LICENSE_SERVER_URL:
+        # Dev mode mock
+        _remove_license_key_from_settings()
+        return {"success": True, "message": "Dev mode deactivated"}
+
+    device_id = _generate_device_id()
+
+    try:
+        async with _httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{LICENSE_SERVER_URL}/api/license/deactivate",
+                json={"key": body.key, "device_id": device_id},
+            )
+            data = resp.json()
+            if resp.status_code == 200 and data.get("success"):
+                # Purge local cache
+                cache_key = f"{body.key}:{device_id}"
+                if cache_key in _license_cache:
+                    del _license_cache[cache_key]
+
+                # Update file cache
+                if _license_cache_file.exists():
+                    try:
+                        file_cache = _json.loads(_license_cache_file.read_text(encoding="utf-8"))
+                        if cache_key in file_cache:
+                            del file_cache[cache_key]
+                            _license_cache_file.write_text(
+                                _json.dumps(file_cache, indent=2, ensure_ascii=False), encoding="utf-8"
+                            )
+                    except Exception as e:
+                        logger.warning("Failed to update license cache file during deactivation: %s", e)
+
+                _remove_license_key_from_settings()
+                return {"success": True, "message": "License deactivated successfully"}
+
+            return {"success": False, "error": data.get("error", "Deactivation failed"),
                     "error_code": data.get("error_code", "UNKNOWN")}
     except _httpx.RequestError as e:
         return {"success": False, "error": f"Cannot reach license server: {e}", "error_code": "UNREACHABLE"}
@@ -307,59 +388,167 @@ async def verify_payment_local(body: VerifyPaymentBody):
         return {"success": False, "error": str(e)}
 
 
-# ── Proxy Settings (save/load DataImpulse credentials locally) ────────────
-class ProxySettings(BaseModel):
-    provider: str = "none"           # "none" | "dataimpulse" | "manual"
-    di_username: str = ""
-    di_password: str = ""
-    di_country: str = ""
-    di_session: str = "0"            # "0" = rotating, "10"/"30"/"60" = sticky
-    manual_proxy: str = ""
+# ── Server-Side Proxy (internal — never exposed to client) ─────────────────
+
+# Circuit breaker state for DataImpulse proxy
+_proxy_circuit = {
+    "failures": 0,
+    "last_failure": 0.0,
+    "open_until": 0.0,       # timestamp when circuit closes again
+    "max_failures": 3,
+    "cooldown_seconds": 300,  # 5 minutes
+}
 
 
-@app.get("/api/proxy-settings")
-async def get_proxy_settings():
-    """Load saved proxy settings from local JSON file."""
+def _circuit_is_open() -> bool:
+    """Check if circuit breaker is open (proxy disabled temporarily)."""
+    if _proxy_circuit["failures"] >= _proxy_circuit["max_failures"]:
+        if time.time() < _proxy_circuit["open_until"]:
+            return True
+        # Cooldown expired — reset
+        _proxy_circuit["failures"] = 0
+    return False
+
+
+def _circuit_record_failure():
+    _proxy_circuit["failures"] += 1
+    _proxy_circuit["last_failure"] = time.time()
+    if _proxy_circuit["failures"] >= _proxy_circuit["max_failures"]:
+        _proxy_circuit["open_until"] = time.time() + _proxy_circuit["cooldown_seconds"]
+        logger.warning("Proxy circuit breaker OPEN — disabling proxy for %ds",
+                        _proxy_circuit["cooldown_seconds"])
+
+
+def _circuit_record_success():
+    _proxy_circuit["failures"] = 0
+
+
+async def _acquire_proxy_internal(target_url: str = "", country: str = "") -> dict:
+    """Acquire proxy from license server. Returns {proxy_url, session_id} or empty dict.
+
+    This runs ONLY on the server — proxy URL never leaves this process.
+    """
+    if _circuit_is_open():
+        logger.debug("Proxy circuit breaker open — skipping acquisition")
+        return {}
+
+    # Read license key from saved settings
+    key = ""
     path = _get_settings_path()
     if path.exists():
         try:
-            data = _json.loads(path.read_text(encoding="utf-8"))
-            proxy_cfg = data.get("proxy", {})
-            return {"ok": True, "settings": proxy_cfg}
-        except Exception as e:
-            logger.warning("Failed to read settings: %s", e)
-    return {"ok": True, "settings": {}}
+            sdata = _json.loads(path.read_text(encoding="utf-8"))
+            key = sdata.get("license_key", "")
+        except Exception:
+            pass
 
+    if not key or not LICENSE_SERVER_URL:
+        return {}
 
-@app.post("/api/proxy-settings")
-async def save_proxy_settings(settings: ProxySettings):
-    """Save proxy settings to local JSON file."""
-    path = _get_settings_path()
+    device_id = _generate_device_id()
+
     try:
-        existing = {}
-        if path.exists():
-            existing = _json.loads(path.read_text(encoding="utf-8"))
-        existing["proxy"] = settings.model_dump()
-        path.write_text(_json.dumps(existing, indent=2, ensure_ascii=False), encoding="utf-8")
-        return {"ok": True}
+        async with _httpx.AsyncClient(timeout=10) as client:
+            resp = await client.post(
+                f"{LICENSE_SERVER_URL}/api/proxy/acquire",
+                json={
+                    "key": key,
+                    "device_id": device_id,
+                    "target_url": target_url,
+                    "country": country,
+                },
+            )
+            result = resp.json()
+            if result.get("success") and result.get("proxy_url"):
+                _circuit_record_success()
+                return {
+                    "proxy_url": result["proxy_url"],
+                    "session_id": result.get("session_id", ""),
+                    "quota_remaining_gb": result.get("quota_remaining_gb"),
+                }
     except Exception as e:
-        logger.error("Failed to save settings: %s", e)
-        return {"ok": False, "error": str(e)}
+        logger.warning("Failed to acquire proxy: %s", e)
+        _circuit_record_failure()
+
+    return {}
+
+
+async def _release_proxy_internal(session_id: str, bytes_used: int = 0, status: str = "success"):
+    """Release proxy session and report bandwidth. Fire-and-forget."""
+    if not session_id or not LICENSE_SERVER_URL:
+        return
+    try:
+        async with _httpx.AsyncClient(timeout=10) as client:
+            await client.post(
+                f"{LICENSE_SERVER_URL}/api/proxy/release",
+                json={"session_id": session_id, "bytes_used": bytes_used, "status": status},
+            )
+    except Exception as e:
+        logger.warning("Failed to release proxy session: %s", e)
 
 
 @app.post("/api/test-proxy")
-async def test_proxy(data: dict):
-    """Test a proxy URL by making a request to httpbin.org/ip."""
-    proxy_url = data.get("proxy", "").strip()
-    if not proxy_url:
-        return {"ok": False, "error": "Proxy URL is empty"}
+async def test_proxy_endpoint(data: dict):
+    """Test proxy connectivity via license server (no credentials exposed)."""
+    country = data.get("country", "")
+    result = await _acquire_proxy_internal(target_url="https://httpbin.org/ip", country=country)
+    if not result.get("proxy_url"):
+        return {"ok": False, "error": "Không thể lấy proxy từ License Server (quota hết hoặc server offline)"}
     try:
-        async with _httpx.AsyncClient(proxy=proxy_url, timeout=15) as client:
+        async with _httpx.AsyncClient(proxy=result["proxy_url"], timeout=15) as client:
             resp = await client.get("https://httpbin.org/ip")
             ip_info = resp.json().get("origin", "unknown")
+            # Release immediately
+            await _release_proxy_internal(result.get("session_id", ""), 0, "test")
             return {"ok": True, "ip": ip_info, "status": resp.status_code}
     except Exception as e:
+        await _release_proxy_internal(result.get("session_id", ""), 0, "fail")
+        _circuit_record_failure()
         return {"ok": False, "error": str(e)}
+
+
+@app.get("/api/proxy/quota")
+async def get_proxy_quota():
+    """Get proxy bandwidth quota from license server."""
+    key = ""
+    path = _get_settings_path()
+    if path.exists():
+        try:
+            sdata = _json.loads(path.read_text(encoding="utf-8"))
+            key = sdata.get("license_key", "")
+        except Exception:
+            pass
+
+    device_id = _generate_device_id()
+
+    if not key or not LICENSE_SERVER_URL:
+        return {"ok": True, "data": {"configured": False, "quota_gb": 0, "used_gb": 0, "remaining_gb": 0}}
+
+    try:
+        async with _httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{LICENSE_SERVER_URL}/api/proxy/quota",
+                params={"key": key, "device_id": device_id},
+            )
+            result = resp.json()
+            if result.get("success"):
+                return {"ok": True, "data": result["data"]}
+    except Exception as e:
+        logger.warning("Failed to get proxy quota: %s", e)
+
+    return {"ok": True, "data": {"configured": False, "quota_gb": 0, "used_gb": 0, "remaining_gb": 0}}
+
+
+@app.get("/api/proxy/status")
+async def get_proxy_status():
+    """Get proxy system status including circuit breaker state."""
+    circuit_open = _circuit_is_open()
+    return {
+        "ok": True,
+        "circuit_open": circuit_open,
+        "failures": _proxy_circuit["failures"],
+        "max_failures": _proxy_circuit["max_failures"],
+    }
 
 
 # Serve index.html at root
@@ -457,17 +646,19 @@ async def ws_crawl(websocket: WebSocket):
             logger.info("Auto-detected anti-bot site (%s), forcing stealth fetcher", _domain)
             fetcher = FetcherType.STEALTH
             
-        # Parse proxy setting
-        proxy = data.get("proxy", None)
-        if proxy and isinstance(proxy, str):
-            proxy = proxy.strip() or None
+        # Server-side proxy acquisition (no proxy URL sent to client)
+        proxy = None
+        _proxy_session_id = ""
+        proxy_result = await _acquire_proxy_internal(target_url=url)
+        if proxy_result.get("proxy_url"):
+            proxy = proxy_result["proxy_url"]
+            _proxy_session_id = proxy_result.get("session_id", "")
+            logger.info("Server-side proxy acquired for crawl (session=%s)", _proxy_session_id[:8])
         else:
-            proxy = None
+            logger.info("No proxy available — using local IP")
 
-        # Load backup proxies from proxies.txt next to app
+        # Load backup proxies from proxies.txt
         backup_proxies: list[str] = []
-        if proxy:
-            backup_proxies.append(proxy)
         _proxies_file = _get_proxies_file_path()
         if _proxies_file and _proxies_file.exists():
             try:
@@ -477,9 +668,7 @@ async def ws_crawl(websocket: WebSocket):
                         backup_proxies.append(line)
             except Exception:
                 pass
-        logger.info("Backup proxies loaded: %d", len(backup_proxies))
 
-        # Build CrawlConfig  (proxy=None → use local IP first)
         config = CrawlConfig(
             url=url,
             output_dir=output_dir,
@@ -490,7 +679,7 @@ async def ws_crawl(websocket: WebSocket):
             allowed_formats=allowed_formats,
             create_dirs=True,
             overwrite=False,
-            proxy=proxy,  # Start directly with the configured proxy (e.g. DataImpulse or manual proxy)
+            proxy=proxy,
         )
         
         # 2. Set up thread-safe event queue for the websocket stream
@@ -569,8 +758,11 @@ async def ws_crawl(websocket: WebSocket):
         
         # 3. Instantiate and run pipeline (with backup proxies for fallback)
         pipeline = CrawlPipeline(config, on_progress=on_progress, backup_proxies=backup_proxies)
+        _crawl_bytes = 0
         try:
-            await pipeline.run()
+            result = await pipeline.run()
+            if result:
+                _crawl_bytes = getattr(result, 'total_bytes', 0)
         except Exception as e:
             logger.error("Crawl pipeline error: %s", e)
             await websocket.send_json({"event": "error", "data": {"message": str(e)}})
@@ -578,9 +770,16 @@ async def ws_crawl(websocket: WebSocket):
             # Signal sender task to exit
             await queue.put((None, None))
             await sender_task
+            # Auto-release proxy session with bandwidth report
+            if _proxy_session_id:
+                await _release_proxy_internal(_proxy_session_id, _crawl_bytes, "success")
+                logger.info("Proxy session released (bytes=%d)", _crawl_bytes)
             
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected")
+        # Release proxy on disconnect too
+        if '_proxy_session_id' in dir() and _proxy_session_id:
+            await _release_proxy_internal(_proxy_session_id, 0, "disconnect")
     except Exception as e:
         logger.error("WebSocket server error: %s", e)
         try:
@@ -626,25 +825,18 @@ async def ws_product_crawl(websocket: WebSocket):
             
         output_dir = data.get("output_dir", "./output").strip()
         max_products = int(data.get("max_products", 50))
-        proxy = data.get("proxy", None)
-        if proxy and isinstance(proxy, str):
-            proxy = proxy.strip() or None
-        else:
-            proxy = None
 
-        # Load backup proxies
+        # Server-side proxy acquisition
+        proxy = None
+        _proxy_session_id = ""
+        proxy_result = await _acquire_proxy_internal(target_url=urls[0])
+        if proxy_result.get("proxy_url"):
+            proxy = proxy_result["proxy_url"]
+            _proxy_session_id = proxy_result.get("session_id", "")
+
         backup_proxies: list[str] = []
         if proxy:
             backup_proxies.append(proxy)
-        _proxies_file = _get_proxies_file_path()
-        if _proxies_file and _proxies_file.exists():
-            try:
-                for line in _proxies_file.read_text(encoding="utf-8").splitlines():
-                    line = line.strip()
-                    if line and not line.startswith("#") and line not in backup_proxies:
-                        backup_proxies.append(line)
-            except Exception:
-                pass
 
         # Queue for WebSocket streaming
         queue = asyncio.Queue()
@@ -683,9 +875,13 @@ async def ws_product_crawl(websocket: WebSocket):
         finally:
             await queue.put((None, None))
             await sender_task
+            if _proxy_session_id:
+                await _release_proxy_internal(_proxy_session_id, 0, "success")
 
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected")
+        if '_proxy_session_id' in dir() and _proxy_session_id:
+            await _release_proxy_internal(_proxy_session_id, 0, "disconnect")
     except Exception as e:
         logger.error("WebSocket server error: %s", e)
         try:
@@ -830,26 +1026,17 @@ async def ws_batch_crawl(websocket: WebSocket):
         except ValueError:
             fetcher = FetcherType.AUTO
 
-        # Parse proxy
-        proxy = data.get("proxy", None)
-        if proxy and isinstance(proxy, str):
-            proxy = proxy.strip() or None
-        else:
-            proxy = None
+        # Server-side proxy acquisition
+        proxy = None
+        _batch_proxy_session_id = ""
+        proxy_result = await _acquire_proxy_internal(target_url=urls[0] if urls else "")
+        if proxy_result.get("proxy_url"):
+            proxy = proxy_result["proxy_url"]
+            _batch_proxy_session_id = proxy_result.get("session_id", "")
 
-        # Load backup proxies
         backup_proxies: list[str] = []
         if proxy:
             backup_proxies.append(proxy)
-        _proxies_file = _get_proxies_file_path()
-        if _proxies_file and _proxies_file.exists():
-            try:
-                for line in _proxies_file.read_text(encoding="utf-8").splitlines():
-                    line = line.strip()
-                    if line and not line.startswith("#") and line not in backup_proxies:
-                        backup_proxies.append(line)
-            except Exception:
-                pass
 
         # Check disk space
         ok_disk, free_gb = _check_disk_space(output_dir)
@@ -1103,6 +1290,8 @@ async def ws_batch_crawl(websocket: WebSocket):
 
     except WebSocketDisconnect:
         logger.info("Batch WebSocket client disconnected")
+        if '_batch_proxy_session_id' in dir() and _batch_proxy_session_id:
+            await _release_proxy_internal(_batch_proxy_session_id, 0, "disconnect")
     except Exception as e:
         logger.error("Batch WebSocket error: %s", e)
         try:
@@ -1110,6 +1299,9 @@ async def ws_batch_crawl(websocket: WebSocket):
         except Exception:
             pass
     finally:
+        # Release proxy on any exit path
+        if '_batch_proxy_session_id' in dir() and _batch_proxy_session_id:
+            await _release_proxy_internal(_batch_proxy_session_id, 0, "batch_done")
         try:
             await websocket.close()
         except Exception:

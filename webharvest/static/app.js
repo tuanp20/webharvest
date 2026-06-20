@@ -59,7 +59,7 @@ async function initLicenseGate() {
         const devData = await devResp.json();
         if (devData.success && devData.data && devData.data.length === 0) {
             // Dev mode — no license server configured
-            licenseData = { valid: true, tier: 'unlimited', limits: { batch_crawl: true, stealth_mode: true, proxy_support: true, max_daily_urls: 999999, max_concurrent: 20 } };
+            licenseData = { valid: true, tier: 'unlimited', limits: { batch_crawl: true, stealth_mode: true, proxy_quota_gb: 50.0, max_daily_urls: 999999, max_concurrent: 20 } };
             applyLicenseTier();
             const closeBtn = document.getElementById('btn-close-license');
             if (closeBtn) closeBtn.style.display = 'block';
@@ -77,6 +77,13 @@ async function initLicenseGate() {
 function showLicenseGate() {
     const gate = document.getElementById('license-gate');
     if (gate) gate.style.display = 'flex';
+
+    // Show/hide deactivate button based on key presence
+    const savedKey = localStorage.getItem(LICENSE_KEY_STORAGE);
+    const deactivateBtn = document.getElementById('btn-deactivate-license');
+    if (deactivateBtn) {
+        deactivateBtn.style.display = savedKey ? 'block' : 'none';
+    }
 }
 
 function hideLicenseGate() {
@@ -90,12 +97,70 @@ function showManageLicense() {
     if (input && savedKey) {
         input.value = savedKey;
     }
-    
+
     // Enable close button in case they want to return to the app
     const closeBtn = document.getElementById('btn-close-license');
     if (closeBtn) closeBtn.style.display = 'block';
-    
+
     showLicenseGate();
+}
+
+async function deactivateLicenseKey() {
+    const savedKey = localStorage.getItem(LICENSE_KEY_STORAGE);
+    if (!savedKey) return;
+
+    if (!confirm('Bạn có chắc chắn muốn hủy kích hoạt bản quyền trên thiết bị này? Sau khi hủy, bạn có thể kích hoạt key này trên máy tính khác.')) {
+        return;
+    }
+
+    const errEl = document.getElementById('license-error');
+    if (errEl) {
+        errEl.style.display = 'none';
+    }
+
+    try {
+        const resp = await fetch('/api/license/deactivate-local', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ key: savedKey }),
+        });
+        const data = await resp.json();
+        if (data.success) {
+            // Clear local storage
+            localStorage.removeItem(LICENSE_KEY_STORAGE);
+            localStorage.removeItem(LICENSE_DATA_STORAGE);
+            licenseData = null;
+
+            // Clear inputs
+            const input = document.getElementById('license-key-input');
+            if (input) input.value = '';
+
+            // Hide badge in header
+            const badge = document.getElementById('tier-badge');
+            if (badge) badge.style.display = 'none';
+
+            // Disable close button and show gate (forcing them to activate/register a key to continue)
+            const closeBtn = document.getElementById('btn-close-license');
+            if (closeBtn) closeBtn.style.display = 'none';
+
+            // Update button visibility
+            const deactivateBtn = document.getElementById('btn-deactivate-license');
+            if (deactivateBtn) deactivateBtn.style.display = 'none';
+
+            alert('Hủy kích hoạt thành công. Phần mềm sẽ quay về trạng thái chưa kích hoạt.');
+            showLicenseGate();
+        } else {
+            if (errEl) {
+                errEl.textContent = data.error || 'Hủy kích hoạt thất bại';
+                errEl.style.display = 'block';
+            }
+        }
+    } catch (e) {
+        if (errEl) {
+            errEl.textContent = 'Lỗi kết nối. Kiểm tra mạng và thử lại.';
+            errEl.style.display = 'block';
+        }
+    }
 }
 
 function applyLicenseTier() {
@@ -149,10 +214,18 @@ function applyLicenseTier() {
         });
     }
 
-    // Disable proxy selection options for Basic
+    // Show proxy quota indicator for all tiers
     const proxySelect = document.getElementById('proxy-provider');
     if (proxySelect) {
-        if (!limits.proxy_support) {
+        const quotaGb = limits.proxy_quota_gb || 0;
+        if (quotaGb > 0) {
+            // All tiers now have proxy access via server
+            Array.from(proxySelect.options).forEach(opt => {
+                opt.disabled = false;
+                opt.textContent = opt.textContent.replace(' 🔒', '');
+            });
+        } else {
+            // No proxy quota - lock to local IP
             Array.from(proxySelect.options).forEach(opt => {
                 if (opt.value !== 'none') {
                     opt.disabled = true;
@@ -161,18 +234,15 @@ function applyLicenseTier() {
                     }
                 }
             });
-            // Force reset to Local IP if currently set to locked proxy options
             if (proxySelect.value !== 'none') {
                 proxySelect.value = 'none';
                 proxySelect.dispatchEvent(new Event('change'));
             }
-        } else {
-            Array.from(proxySelect.options).forEach(opt => {
-                opt.disabled = false;
-                opt.textContent = opt.textContent.replace(' 🔒', '');
-            });
         }
     }
+
+    // Load proxy quota indicator
+    loadProxyStatus();
 }
 
 async function activateLicenseKey() {
@@ -291,171 +361,90 @@ function initAppleScrollAnimations() {
     document.querySelectorAll('.apple-animate').forEach(el => observer.observe(el));
 }
 
-// ── DataImpulse Proxy Panel Logic ──────────────────────────────────
+// ── Proxy Status (Server-Managed — read-only display) ──────────────────
+// Proxy is fully managed server-side. No credentials or URLs touch the frontend.
+
 function initProxyPanel() {
-    const providerSelect = document.getElementById("proxy-provider");
-    const diPanel = document.getElementById("di-panel");
-    const manualPanel = document.getElementById("manual-panel");
+    // Load quota display and circuit breaker status
+    loadProxyStatus();
 
-    // Toggle panels based on provider selection
-    providerSelect.addEventListener("change", () => {
-        const val = providerSelect.value;
-        diPanel.style.display = val === "dataimpulse" ? "block" : "none";
-        manualPanel.style.display = val === "manual" ? "block" : "none";
-        syncProxyHiddenField();
-        lucide.createIcons(); // re-render icons in newly visible panels
-    });
-
-    // Password toggle
-    const btnEye = document.getElementById("btn-toggle-pass");
-    const passInput = document.getElementById("di-password");
-    if (btnEye && passInput) {
-        btnEye.addEventListener("click", () => {
-            const isPassword = passInput.type === "password";
-            passInput.type = isPassword ? "text" : "password";
-            // Swap icon
-            const icon = btnEye.querySelector("i");
-            if (icon) icon.setAttribute("data-lucide", isPassword ? "eye-off" : "eye");
-            lucide.createIcons();
-        });
-    }
-
-    // Test connection button
+    // Test connection button (tests via server, no credentials exposed)
     const btnTest = document.getElementById("btn-test-proxy");
     if (btnTest) btnTest.addEventListener("click", testProxyConnection);
-
-    // Save settings button
-    const btnSave = document.getElementById("btn-save-proxy");
-    if (btnSave) btnSave.addEventListener("click", saveProxySettings);
-
-    // Load saved settings from backend
-    loadProxySettings();
 }
 
-function buildDataImpulseProxy() {
-    const user = (document.getElementById("di-username").value || "").trim();
-    const pass = (document.getElementById("di-password").value || "").trim();
-    const country = document.getElementById("di-country").value;
-    const session = document.getElementById("di-session").value;
+async function loadProxyStatus() {
+    try {
+        const [quotaResp, statusResp] = await Promise.all([
+            fetch('/api/proxy/quota'),
+            fetch('/api/proxy/status'),
+        ]);
+        const quotaData = await quotaResp.json();
+        const statusData = await statusResp.json();
 
-    if (!user || !pass) return "";
+        const statusText = document.getElementById("proxy-status-text");
+        const statusDot = document.querySelector(".proxy-dot");
+        const quotaEl = document.getElementById("proxy-quota-display");
 
-    let params = [];
-    if (country) params.push(`cr.${country}`);
-    if (session !== "0") params.push(`sessttl.${session}`);
+        // Show quota
+        if (quotaData.ok && quotaData.data && quotaData.data.configured) {
+            const d = quotaData.data;
+            if (quotaEl) {
+                quotaEl.textContent = `Proxy: ${d.remaining_gb.toFixed(2)}/${d.quota_gb} GB`;
+                quotaEl.style.display = 'inline-block';
+            }
+            if (statusText) statusText.textContent = "🛡️ Proxy được quản lý qua server — tự động cấp phát";
+            if (statusDot) statusDot.className = "proxy-dot dot-proxy";
+        } else {
+            if (statusText) statusText.textContent = "🌐 Ưu tiên IP máy local — tự động dùng proxy nếu có license";
+            if (statusDot) statusDot.className = "proxy-dot dot-local";
+        }
 
-    const login = params.length > 0 ? `${user}__${params.join(";")}` : user;
-    return `http://${login}:${pass}@gw.dataimpulse.com:823`;
-}
-
-function syncProxyHiddenField() {
-    const provider = document.getElementById("proxy-provider").value;
-    const hidden = document.getElementById("proxy");
-
-    if (provider === "dataimpulse") {
-        hidden.value = buildDataImpulseProxy();
-    } else if (provider === "manual") {
-        hidden.value = (document.getElementById("proxy-manual").value || "").trim();
-    } else {
-        hidden.value = "";
+        // Show circuit breaker warning
+        if (statusData.ok && statusData.circuit_open) {
+            if (statusText) statusText.textContent = "⚠️ Proxy tạm ngưng (circuit breaker) — sẽ tự khôi phục sau 5 phút";
+            if (statusDot) statusDot.className = "proxy-dot dot-error";
+        }
+    } catch (e) {
+        console.warn('[Proxy] Failed to load status:', e);
     }
 }
 
 async function testProxyConnection() {
-    syncProxyHiddenField();
-    const proxyUrl = document.getElementById("proxy").value;
     const resultEl = document.getElementById("proxy-test-result");
     const btn = document.getElementById("btn-test-proxy");
 
-    if (!proxyUrl) {
-        resultEl.className = "proxy-test-result error";
-        resultEl.textContent = "⚠ Vui lòng nhập đầy đủ thông tin proxy";
-        return;
+    if (resultEl) {
+        resultEl.className = "proxy-test-result loading";
+        resultEl.textContent = "⏳ Đang kiểm tra proxy qua server...";
     }
-
-    resultEl.className = "proxy-test-result loading";
-    resultEl.textContent = "⏳ Đang kiểm tra...";
-    btn.classList.add("testing");
+    if (btn) btn.classList.add("testing");
 
     try {
         const resp = await fetch("/api/test-proxy", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ proxy: proxyUrl })
+            body: JSON.stringify({})
         });
         const data = await resp.json();
         if (data.ok) {
-            resultEl.className = "proxy-test-result success";
-            resultEl.textContent = `✓ Kết nối thành công — IP: ${data.ip}`;
+            if (resultEl) {
+                resultEl.className = "proxy-test-result success";
+                resultEl.textContent = `✓ Proxy hoạt động — IP: ${data.ip}`;
+            }
         } else {
-            resultEl.className = "proxy-test-result error";
-            resultEl.textContent = `✗ Lỗi: ${data.error}`;
+            if (resultEl) {
+                resultEl.className = "proxy-test-result error";
+                resultEl.textContent = `✗ ${data.error}`;
+            }
         }
     } catch (e) {
-        resultEl.className = "proxy-test-result error";
-        resultEl.textContent = `✗ Không thể kết nối server`;
+        if (resultEl) {
+            resultEl.className = "proxy-test-result error";
+            resultEl.textContent = "✗ Không thể kết nối server";
+        }
     } finally {
-        btn.classList.remove("testing");
-    }
-}
-
-async function saveProxySettings() {
-    const provider = document.getElementById("proxy-provider").value;
-    const payload = {
-        provider,
-        di_username: (document.getElementById("di-username").value || "").trim(),
-        di_password: (document.getElementById("di-password").value || "").trim(),
-        di_country: document.getElementById("di-country").value,
-        di_session: document.getElementById("di-session").value,
-        manual_proxy: (document.getElementById("proxy-manual").value || "").trim(),
-    };
-
-    const resultEl = document.getElementById("proxy-test-result");
-    try {
-        const resp = await fetch("/api/proxy-settings", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload)
-        });
-        const data = await resp.json();
-        if (data.ok) {
-            resultEl.className = "proxy-test-result success";
-            resultEl.textContent = "✓ Đã lưu cài đặt thành công";
-            setTimeout(() => { resultEl.textContent = ""; resultEl.className = "proxy-test-result"; }, 3000);
-        } else {
-            resultEl.className = "proxy-test-result error";
-            resultEl.textContent = `✗ Lỗi lưu: ${data.error}`;
-        }
-    } catch (e) {
-        resultEl.className = "proxy-test-result error";
-        resultEl.textContent = "✗ Không thể kết nối server";
-    }
-}
-
-async function loadProxySettings() {
-    try {
-        const resp = await fetch("/api/proxy-settings");
-        const data = await resp.json();
-        if (data.ok && data.settings && Object.keys(data.settings).length > 0) {
-            const s = data.settings;
-            const providerSelect = document.getElementById("proxy-provider");
-            if (s.provider) providerSelect.value = s.provider;
-            if (s.di_username) document.getElementById("di-username").value = s.di_username;
-            if (s.di_password) document.getElementById("di-password").value = s.di_password;
-            if (s.di_country) document.getElementById("di-country").value = s.di_country;
-            if (s.di_session) document.getElementById("di-session").value = s.di_session;
-            if (s.manual_proxy) document.getElementById("proxy-manual").value = s.manual_proxy;
-
-            // Show relevant panel
-            const diPanel = document.getElementById("di-panel");
-            const manualPanel = document.getElementById("manual-panel");
-            diPanel.style.display = s.provider === "dataimpulse" ? "block" : "none";
-            manualPanel.style.display = s.provider === "manual" ? "block" : "none";
-            syncProxyHiddenField();
-            lucide.createIcons();
-        }
-    } catch (e) {
-        // Settings not available yet — ignore
+        if (btn) btn.classList.remove("testing");
     }
 }
 
@@ -606,20 +595,11 @@ crawlForm.addEventListener("submit", (e) => {
     ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
-        // Compose proxy URL from current panel state before sending
-        syncProxyHiddenField();
-        const proxy = document.getElementById("proxy").value.trim();
-        const payload = {
-            url,
-            output_dir,
-            depth,
-            max_pages,
-            fetcher,
-            min_file_size,
-            allowed_formats: formats,
-            proxy: proxy || null
-        };
-        ws.send(JSON.stringify(payload));
+        // Proxy is handled server-side — no proxy in payload
+        ws.send(JSON.stringify({
+            url, output_dir, depth, max_pages, fetcher,
+            min_file_size, allowed_formats: formats,
+        }));
     };
     
     ws.onmessage = (event) => {
@@ -994,8 +974,6 @@ function startBatchCrawl() {
     const fetcher = document.getElementById("fetcher").value;
     const min_file_size = parseInt(document.getElementById("min_file_size").value) * 1024;
     const formats = Array.from(document.querySelectorAll('input[name="format"]:checked')).map(cb => cb.value);
-    syncProxyHiddenField();
-    const proxy = document.getElementById("proxy").value.trim();
 
     // UI reset
     btnStart.disabled = true; btnStop.disabled = false;
@@ -1034,7 +1012,7 @@ function startBatchCrawl() {
     let completedCount = 0, batchSuccess = 0, batchFailed = 0;
 
     batchWs.onopen = () => {
-        batchWs.send(JSON.stringify({ urls: batchUrls, output_dir, depth, max_pages, fetcher, min_file_size, allowed_formats: formats, proxy: proxy || null }));
+        batchWs.send(JSON.stringify({ urls: batchUrls, output_dir, depth, max_pages, fetcher, min_file_size, allowed_formats: formats }));
     };
 
     batchWs.onmessage = (event) => {
@@ -1213,7 +1191,7 @@ function renderProductsTable() {
     lucide.createIcons();
 }
 
-productCrawlForm.addEventListener("submit", (e) => {
+productCrawlForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     
     const urlsRaw = document.getElementById("product-urls").value;
@@ -1226,7 +1204,6 @@ productCrawlForm.addEventListener("submit", (e) => {
     
     const output_dir = document.getElementById("product-output-dir").value.trim();
     const max_products = parseInt(document.getElementById("max-products").value) || 50;
-    const proxy = document.getElementById("product-proxy").value.trim();
     
     // UI Updates
     btnProductStart.disabled = true;
@@ -1251,13 +1228,8 @@ productCrawlForm.addEventListener("submit", (e) => {
     productWs = new WebSocket(wsUrl);
     
     productWs.onopen = () => {
-        const payload = {
-            urls,
-            output_dir,
-            max_products,
-            proxy: proxy || null
-        };
-        productWs.send(JSON.stringify(payload));
+        // Proxy is handled server-side
+        productWs.send(JSON.stringify({ urls, output_dir, max_products }));
     };
     
     productWs.onmessage = (event) => {

@@ -1,0 +1,1660 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebHarvest - Trình cào dữ liệu & tải ảnh tự động chuyên nghiệp</title>
+    <meta name="description" content="Giải pháp cào dữ liệu website và tải ảnh hàng loạt hàng đầu Việt Nam. Tích hợp proxy xoay dân cư DataImpulse, hỗ trợ Google Sheets, Excel và bypass Cloudflare.">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet">
+    
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    
+    <!-- Custom CSS (Premium Glassmorphism & Sleek Dark Mode) -->
+    <style>
+        :root {
+            --bg-primary: #030014;
+            --bg-secondary: rgba(255, 255, 255, 0.02);
+            --bg-card: rgba(10, 8, 30, 0.75);
+            --text-primary: #f5f5f7;
+            --text-secondary: #8e8e93;
+            --accent-purple: #818cf8;
+            --accent-pink: #c084fc;
+            --accent-blue: #38bdf8;
+            --success: #34d399;
+            --error: #f87171;
+            --apple-hairline: rgba(255, 255, 255, 0.08);
+            --font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+            --font-display: 'Space Grotesk', -apple-system, sans-serif;
+            --gradient-primary: linear-gradient(135deg, #818cf8 0%, #c084fc 50%, #38bdf8 100%);
+            --gradient-glow: linear-gradient(135deg, rgba(129, 140, 248, 0.15), rgba(192, 132, 252, 0.05));
+            --glow-shadow: 0 0 50px rgba(129, 140, 248, 0.12);
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            scroll-behavior: smooth;
+        }
+
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            line-height: 1.65;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Ambient Glow Backgrounds */
+        .ambient-glow {
+            position: absolute;
+            width: 800px;
+            height: 800px;
+            background: radial-gradient(circle, rgba(129, 140, 248, 0.08) 0%, rgba(3, 0, 20, 0) 70%);
+            z-index: -1;
+            filter: blur(80px);
+            pointer-events: none;
+        }
+        .glow-1 { top: -10%; left: 10%; }
+        .glow-2 { top: 40%; right: -10%; background: radial-gradient(circle, rgba(192, 132, 252, 0.06) 0%, rgba(3, 0, 20, 0) 70%); }
+        .glow-3 { bottom: 5%; left: -10%; background: radial-gradient(circle, rgba(56, 189, 248, 0.06) 0%, rgba(3, 0, 20, 0) 70%); }
+
+        /* Container */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 24px;
+        }
+
+        /* Header / Navbar */
+        header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: rgba(3, 0, 20, 0.75);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--apple-hairline);
+            z-index: 1000;
+        }
+
+        .nav-container {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 80px;
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+            color: var(--text-primary);
+            font-weight: 800;
+            font-size: 24px;
+            font-family: var(--font-display);
+            letter-spacing: -0.02em;
+        }
+
+        .logo i {
+            color: var(--accent-purple);
+            filter: drop-shadow(0 0 10px rgba(129, 140, 248, 0.6));
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 36px;
+            list-style: none;
+            align-items: center;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 600;
+            transition: color 0.2s ease;
+        }
+
+        .nav-links a:hover {
+            color: var(--text-primary);
+        }
+
+        .btn-download-nav {
+            background: var(--gradient-primary);
+            color: #030014 !important;
+            padding: 10px 22px;
+            border-radius: 99px;
+            font-weight: 700 !important;
+            box-shadow: 0 4px 15px rgba(129, 140, 248, 0.3);
+            transition: transform 0.2s, box-shadow 0.2s !important;
+        }
+
+        .btn-download-nav:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(129, 140, 248, 0.5);
+        }
+
+        /* Hero Section */
+        .hero {
+            padding-top: 180px;
+            padding-bottom: 80px;
+            text-align: center;
+            position: relative;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(129, 140, 248, 0.08);
+            border: 1px solid rgba(129, 140, 248, 0.2);
+            color: var(--accent-purple);
+            padding: 8px 18px;
+            border-radius: 99px;
+            font-size: 13px;
+            font-weight: 700;
+            margin-bottom: 28px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .hero h1 {
+            font-family: var(--font-display);
+            font-size: 64px;
+            font-weight: 800;
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+            margin-bottom: 24px;
+            background: linear-gradient(to right, #ffffff, #c7d2fe, #38bdf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .hero p.subtitle {
+            font-size: 19px;
+            color: var(--text-secondary);
+            max-width: 720px;
+            margin: 0 auto 40px;
+            line-height: 1.6;
+        }
+
+        .hero-actions {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 15px 32px;
+            border-radius: 12px;
+            font-size: 15px;
+            font-weight: 700;
+            text-decoration: none;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .btn-primary {
+            background: var(--gradient-primary);
+            color: #030014;
+            border: none;
+            box-shadow: 0 4px 20px rgba(129, 140, 248, 0.4);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(129, 140, 248, 0.6);
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-primary);
+            border: 1px solid var(--apple-hairline);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.08);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        /* Live Simulator Playground Console */
+        .simulator-section {
+            margin-top: 60px;
+            text-align: left;
+        }
+
+        .simulator-card {
+            background: rgba(10, 8, 30, 0.55);
+            border: 1px solid var(--apple-hairline);
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 0 30px 70px rgba(0, 0, 0, 0.8), var(--glow-shadow);
+            backdrop-filter: blur(16px);
+        }
+
+        .sim-tabs {
+            display: flex;
+            gap: 12px;
+            margin-bottom: 20px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            padding-bottom: 16px;
+        }
+
+        .sim-tab {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--apple-hairline);
+            color: var(--text-secondary);
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .sim-tab.active {
+            background: rgba(129, 140, 248, 0.15);
+            color: var(--accent-purple);
+            border-color: rgba(129, 140, 248, 0.3);
+        }
+
+        .sim-workspace {
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 20px;
+        }
+
+        .sim-panel {
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid rgba(255, 255, 255, 0.04);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .sim-panel label {
+            font-size: 12px;
+            font-weight: 700;
+            color: #d1d1d6;
+        }
+
+        .sim-panel input, .sim-panel select {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.04);
+            border: 1px solid var(--apple-hairline);
+            padding: 10px 14px;
+            border-radius: 8px;
+            color: var(--text-primary);
+            font-size: 13px;
+            outline: none;
+        }
+
+        .sim-console {
+            background: #02000a;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            font-family: 'Space Grotesk', monospace;
+            font-size: 13px;
+            color: #34d399;
+            height: 280px;
+            overflow-y: auto;
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);
+        }
+
+        .sim-console-line {
+            margin-bottom: 6px;
+            line-height: 1.5;
+        }
+
+        .sim-console-line.info { color: var(--accent-blue); }
+        .sim-console-line.warning { color: #f59e0b; }
+        .sim-console-line.success { color: var(--success); }
+
+        /* How It Works (Steps) */
+        .steps-section {
+            padding: 100px 0;
+            border-top: 1px solid var(--apple-hairline);
+        }
+
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 40px;
+            margin-top: 50px;
+        }
+
+        .step-card {
+            position: relative;
+            background: var(--bg-card);
+            border: 1px solid var(--apple-hairline);
+            border-radius: 20px;
+            padding: 40px 32px;
+            transition: all 0.2s;
+        }
+
+        .step-card:hover {
+            border-color: rgba(129, 140, 248, 0.3);
+        }
+
+        .step-number {
+            font-family: var(--font-display);
+            font-size: 64px;
+            font-weight: 800;
+            background: linear-gradient(135deg, rgba(129, 140, 248, 0.3) 0%, rgba(56, 189, 248, 0) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            line-height: 1;
+        }
+
+        .step-card h3 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .step-card p {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* Extractors / Integrations Showcase */
+        .showcase-section {
+            padding: 80px 0;
+            background: rgba(10, 8, 30, 0.3);
+            border-top: 1px solid var(--apple-hairline);
+            border-bottom: 1px solid var(--apple-hairline);
+            text-align: center;
+        }
+
+        .logo-cloud {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 40px;
+            margin-top: 40px;
+            align-items: center;
+        }
+
+        .logo-cloud-item {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--apple-hairline);
+            padding: 14px 28px;
+            border-radius: 12px;
+            color: var(--text-primary);
+            font-size: 15px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            transition: all 0.2s;
+        }
+
+        .logo-cloud-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(129, 140, 248, 0.3);
+            transform: translateY(-2px);
+        }
+
+        /* Features Section */
+        .features {
+            padding: 100px 0;
+        }
+
+        .section-header {
+            text-align: center;
+            margin-bottom: 60px;
+        }
+
+        .section-header h2 {
+            font-family: var(--font-display);
+            font-size: 42px;
+            font-weight: 800;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .section-header p {
+            color: var(--text-secondary);
+            font-size: 17px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+        }
+
+        .feature-card {
+            background: var(--bg-card);
+            border: 1px solid var(--apple-hairline);
+            padding: 32px;
+            border-radius: 18px;
+            transition: all 0.3s ease;
+        }
+
+        .feature-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(129, 140, 248, 0.3);
+            box-shadow: 0 10px 30px rgba(129, 140, 248, 0.08);
+        }
+
+        .feature-icon {
+            width: 52px;
+            height: 52px;
+            background: rgba(129, 140, 248, 0.08);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--accent-purple);
+            margin-bottom: 24px;
+        }
+
+        .feature-card h3 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .feature-card p {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        /* Detailed Comparison Matrix Table */
+        .comparison-section {
+            padding: 100px 0;
+            border-top: 1px solid var(--apple-hairline);
+        }
+
+        .table-wrapper {
+            width: 100%;
+            overflow-x: auto;
+            margin-top: 50px;
+            border-radius: 16px;
+            border: 1px solid var(--apple-hairline);
+            background: var(--bg-card);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            text-align: left;
+            font-size: 14px;
+        }
+
+        th, td {
+            padding: 18px 24px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+        }
+
+        th {
+            background: rgba(255, 255, 255, 0.01);
+            font-weight: 700;
+            color: var(--text-primary);
+            font-family: var(--font-display);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        .matrix-yes {
+            color: var(--success);
+            font-weight: 700;
+        }
+
+        .matrix-no {
+            color: var(--text-secondary);
+        }
+
+        /* Pricing Section */
+        .pricing {
+            padding: 100px 0;
+            border-top: 1px solid var(--apple-hairline);
+        }
+
+        .duration-selector {
+            display: flex;
+            justify-content: center;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--apple-hairline);
+            padding: 4px;
+            border-radius: 99px;
+            max-width: 520px;
+            margin: 0 auto 48px;
+        }
+
+        .duration-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            padding: 10px 20px;
+            border-radius: 99px;
+            font-size: 14px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            flex: 1;
+            white-space: nowrap;
+        }
+
+        .duration-btn.active {
+            background: var(--gradient-primary);
+            color: #030014;
+        }
+
+        .pricing-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 30px;
+        }
+
+        .pricing-card {
+            background: var(--bg-card);
+            border: 1px solid var(--apple-hairline);
+            border-radius: 24px;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            transition: all 0.3s ease;
+        }
+
+        .pricing-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(129, 140, 248, 0.3);
+            box-shadow: 0 20px 40px rgba(129, 140, 248, 0.1);
+        }
+
+        .pricing-card.recommended {
+            border-color: var(--accent-purple);
+            box-shadow: 0 0 35px rgba(129, 140, 248, 0.18);
+        }
+
+        .pricing-card.recommended::before {
+            content: 'PHỔ BIẾN NHẤT';
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--gradient-primary);
+            color: #030014;
+            font-size: 11px;
+            font-weight: 800;
+            padding: 4px 18px;
+            border-radius: 99px;
+            letter-spacing: 0.05em;
+        }
+
+        .plan-header {
+            margin-bottom: 32px;
+        }
+
+        .plan-title {
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 8px;
+            font-family: var(--font-display);
+        }
+
+        .plan-price-box {
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+            margin-top: 16px;
+        }
+
+        .plan-price {
+            font-size: 42px;
+            font-weight: 800;
+            color: var(--text-primary);
+        }
+
+        .plan-period {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .plan-price-discounted {
+            font-size: 14px;
+            color: var(--success);
+            font-weight: 600;
+            margin-top: 6px;
+        }
+
+        .plan-features-list {
+            list-style: none;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-bottom: 40px;
+            flex-grow: 1;
+        }
+
+        .plan-features-list li {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 14px;
+            color: #d1d1d6;
+        }
+
+        .plan-features-list li i {
+            color: var(--accent-blue);
+            flex-shrink: 0;
+        }
+
+        .plan-features-list li.disabled {
+            color: var(--text-secondary);
+            text-decoration: line-through;
+        }
+
+        .plan-features-list li.disabled i {
+            color: var(--text-secondary);
+        }
+
+        .btn-buy {
+            width: 100%;
+            justify-content: center;
+        }
+
+        /* FAQ Section */
+        .faq-section {
+            padding: 100px 0;
+            border-top: 1px solid var(--apple-hairline);
+        }
+
+        .faq-grid {
+            max-width: 800px;
+            margin: 50px auto 0;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .faq-item {
+            background: rgba(255, 255, 255, 0.01);
+            border: 1px solid var(--apple-hairline);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: all 0.2s;
+        }
+
+        .faq-header {
+            padding: 20px 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .faq-header h3 {
+            font-size: 16px;
+            font-weight: 700;
+        }
+
+        .faq-icon {
+            transition: transform 0.2s;
+        }
+
+        .faq-body {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.2s ease-out;
+            padding: 0 24px;
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .faq-item.active {
+            border-color: rgba(129, 140, 248, 0.25);
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .faq-item.active .faq-icon {
+            transform: rotate(180deg);
+        }
+
+        .faq-item.active .faq-body {
+            padding-bottom: 20px;
+        }
+
+        /* Download Section */
+        .download-section {
+            padding: 100px 0;
+            background: linear-gradient(180deg, rgba(3, 0, 20, 0) 0%, rgba(10, 8, 30, 0.5) 100%);
+            border-top: 1px solid var(--apple-hairline);
+            text-align: center;
+        }
+
+        .download-cards {
+            display: flex;
+            justify-content: center;
+            gap: 24px;
+            margin-top: 48px;
+            flex-wrap: wrap;
+        }
+
+        .download-card {
+            background: var(--bg-card);
+            border: 1px solid var(--apple-hairline);
+            border-radius: 20px;
+            padding: 40px 32px;
+            width: 320px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            transition: border-color 0.2s;
+        }
+
+        .download-card:hover {
+            border-color: rgba(129, 140, 248, 0.3);
+        }
+
+        .download-card i {
+            font-size: 44px;
+            color: var(--accent-purple);
+        }
+
+        .download-card h3 {
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .download-card p {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        /* Modal Styles */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(3, 0, 20, 0.85);
+            backdrop-filter: blur(12px);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-card {
+            background: #0d0b21;
+            border: 1px solid var(--apple-hairline);
+            border-radius: 24px;
+            padding: 40px;
+            width: 100%;
+            max-width: 480px;
+            position: relative;
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), var(--glow-shadow);
+        }
+
+        .close-modal {
+            position: absolute;
+            top: 24px;
+            right: 24px;
+            font-size: 28px;
+            color: var(--text-secondary);
+            cursor: pointer;
+            background: none;
+            border: none;
+            line-height: 1;
+        }
+
+        .close-modal:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-header {
+            margin-bottom: 24px;
+        }
+
+        .modal-header h3 {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .modal-header p {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+            text-align: left;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #d1d1d6;
+            margin-bottom: 8px;
+        }
+
+        .form-group input {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--apple-hairline);
+            padding: 12px 16px;
+            border-radius: 10px;
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-group input:focus {
+            border-color: var(--accent-purple);
+        }
+
+        .checkout-summary {
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px solid var(--apple-hairline);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 24px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .summary-label {
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        .summary-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--accent-blue);
+        }
+
+        .checkout-error {
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid rgba(239, 68, 68, 0.2);
+            color: var(--error);
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            margin-bottom: 20px;
+            display: none;
+        }
+
+        /* Footer */
+        footer {
+            border-top: 1px solid var(--apple-hairline);
+            padding: 60px 0;
+            background: #030014;
+            color: var(--text-secondary);
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .footer-logo {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-primary);
+            font-weight: 700;
+            font-size: 18px;
+            text-decoration: none;
+            margin-bottom: 16px;
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .nav-links { display: none; }
+            .hero h1 { font-size: 40px; }
+            .hero p.subtitle { font-size: 16px; }
+            .sim-workspace { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="ambient-glow glow-1"></div>
+    <div class="ambient-glow glow-2"></div>
+    <div class="ambient-glow glow-3"></div>
+
+    <!-- Navigation -->
+    <header>
+        <div class="container nav-container">
+            <a href="#" class="logo">
+                <i data-lucide="sprout"></i>
+                <span>WebHarvest</span>
+            </a>
+            <ul class="nav-links">
+                <li><a href="#features">Tính năng</a></li>
+                <li><a href="#simulator">Chạy thử</a></li>
+                <li><a href="#comparison">Bảng So Sánh</a></li>
+                <li><a href="#pricing">Bảng giá</a></li>
+                <li><a href="#download" class="btn-download-nav">Tải Setup</a></li>
+            </ul>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="hero container">
+        <div class="hero-badge">
+            <i data-lucide="sparkles" style="width: 14px; height: 14px;"></i>
+            <span>Trình cào dữ liệu chuyên sâu thế hệ mới</span>
+        </div>
+        <h1>Tự động cào thông tin & tải ảnh hàng loạt</h1>
+        <p class="subtitle">Giải pháp crawl dữ liệu tối tân hỗ trợ cào danh sách Excel, Google Sheets. Vượt qua cơ chế chống bot Cloudflare, tích hợp Proxy xoay dân cư từ DataImpulse và tự động hoá trích xuất dữ liệu.</p>
+        
+        <div class="hero-actions">
+            <a href="#pricing" class="btn btn-primary">Đăng Ký Bản Quyền</a>
+            <a href="#download" class="btn btn-secondary">Tải Bộ Setup Miễn Phí</a>
+        </div>
+
+        <!-- Interactive Simulator Card -->
+        <div class="simulator-section" id="simulator">
+            <div class="simulator-card">
+                <div class="window-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 12px;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="dot dot-red"></div>
+                        <div class="dot dot-yellow"></div>
+                        <div class="dot dot-green"></div>
+                        <span class="window-title" style="margin-left: 8px;">WebHarvest Sandbox Live Simulation</span>
+                    </div>
+                    <span style="font-size: 11px; color: var(--accent-purple); font-weight: 700; background: rgba(129, 140, 248, 0.1); padding: 2px 8px; border-radius: 4px;">LOCAL AGENT</span>
+                </div>
+                
+                <div class="sim-workspace">
+                    <div class="sim-panel">
+                        <div>
+                            <label for="sim-template">Chọn Website Mẫu</label>
+                            <select id="sim-template" style="margin-top: 6px;" onchange="changeSimTemplate()">
+                                <option value="shopee">Trang sản phẩm Shopee (Dynamic JS)</option>
+                                <option value="pinterest">Pinterest Gallery (Stealth Chromium)</option>
+                                <option value="shopify">Shopify Catalog (Static Parser)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="sim-url">Đường Dẫn URL Cần Cào</label>
+                            <input type="text" id="sim-url" style="margin-top: 6px;" value="https://shopee.vn/product-sample-detail-i.12039.4019">
+                        </div>
+                        <div>
+                            <label for="sim-fetcher">Chế Độ Fetcher</label>
+                            <select id="sim-fetcher" style="margin-top: 6px;">
+                                <option value="auto">Auto-selection (Khuyên dùng)</option>
+                                <option value="stealth">Stealth Playwright (Bypass Firewall)</option>
+                                <option value="static">Static httpx (Tốc độ cao)</option>
+                            </select>
+                        </div>
+                        <button onclick="startSimulation()" class="btn btn-primary" style="padding: 10px; width: 100%; justify-content: center; font-size: 13px;">
+                            <i data-lucide="play" style="width: 14px;"></i> Bắt Đầu Chạy Thử
+                        </button>
+                    </div>
+                    
+                    <div class="sim-console" id="sim-console-screen">
+                        <div class="sim-console-line info">[System] WebHarvest CLI Engine v1.0.0.</div>
+                        <div class="sim-console-line">[System] Sẵn sàng cào. Chọn website mẫu và ấn "Bắt Đầu Chạy Thử".</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Extractors Showcase Section -->
+    <section class="showcase-section">
+        <div class="container">
+            <p style="color: var(--text-secondary); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;">Hỗ trợ phân tích dữ liệu tự động các nền tảng phổ biến</p>
+            <div class="logo-cloud">
+                <div class="logo-cloud-item"><i data-lucide="shopping-cart"></i> Shopee Việt Nam</div>
+                <div class="logo-cloud-item"><i data-lucide="store"></i> Lazada Mall</div>
+                <div class="logo-cloud-item"><i data-lucide="image"></i> Pinterest Gallery</div>
+                <div class="logo-cloud-item"><i data-lucide="package"></i> Etsy Storefront</div>
+                <div class="logo-cloud-item"><i data-lucide="code"></i> Shopify System</div>
+                <div class="logo-cloud-item"><i data-lucide="file-spreadsheet"></i> Google Sheets / Excel</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- How It Works Section -->
+    <section class="steps-section container">
+        <div class="section-header">
+            <h2>Quy trình hoạt động 3 bước đơn giản</h2>
+            <p>Không cần biết lập trình, cào trích xuất hàng triệu dữ liệu chỉ với vài bước trực quan.</p>
+        </div>
+        
+        <div class="steps-grid">
+            <div class="step-card">
+                <div class="step-number">01</div>
+                <h3>Tải và Cài Đặt Setup</h3>
+                <p>Tải xuống ứng dụng WebHarvest cho Windows/macOS. Ứng dụng chạy trực tiếp không cần cài đặt Python hay môi trường phức tạp.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-number">02</div>
+                <h3>Cấu Hình Link Hoặc Tệp</h3>
+                <p>Nhập địa chỉ website cần cào hoặc tải lên file Excel/Google Sheets chứa hàng loạt đường dẫn. Chọn định dạng ảnh mong muốn.</p>
+            </div>
+            <div class="step-card">
+                <div class="step-number">03</div>
+                <h3>Nhận Kết Quả Tải Về</h3>
+                <p>Ứng dụng tự động cào, tải ảnh chất lượng cao vào các thư mục riêng biệt, và tạo file Excel chứa thông tin đầy đủ cấu trúc.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Core Features Details -->
+    <section id="features" class="features container">
+        <div class="section-header">
+            <h2>Tính năng ưu việt, thiết kế tối ưu</h2>
+            <p>Hệ thống lõi cào dữ liệu tối tân vượt trội hơn mọi giải pháp cào dữ liệu thông thường.</p>
+        </div>
+
+        <div class="features-grid">
+            <div class="feature-card">
+                <div class="feature-icon"><i data-lucide="shield-alert"></i></div>
+                <h3>Vượt Qua Cloudflare</h3>
+                <p>Bộ cào ẩn danh cao cấp giả lập đầy đủ vân tay trình duyệt, vượt qua các hệ thống phát hiện bot của Cloudflare và chống cào dữ liệu.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i data-lucide="globe-2"></i></div>
+                <h3>Proxy Dân Cư DataImpulse</h3>
+                <p>Kết nối trực tiếp thông qua bể Proxy xoay dân cư sạch của nhà cung cấp DataImpulse. Địa chỉ IP được thay đổi liên tục.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i data-lucide="server"></i></div>
+                <h3>Tự Động Fallback IP Local</h3>
+                <p>Trong trường hợp băng thông Proxy hết hạn hoặc lỗi kết nối, hệ thống tự động chuyển sang IP Local để cào dữ liệu không bị ngắt quãng.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i data-lucide="link"></i></div>
+                <h3>Device Binding (SHA256)</h3>
+                <p>Quản lý kích hoạt bản quyền an toàn, mã hóa thông tin phần cứng máy tính bằng mã SHA256. Có nút Hủy kích hoạt để đổi máy tự do.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i data-lucide="refresh-cw"></i></div>
+                <h3>Tự Động Tránh Trùng Lặp</h3>
+                <p>Kiểm tra trùng lặp thông minh dựa trên tên tệp và hash nội dung. Tiết kiệm băng thông tối đa, không bao giờ tải lại ảnh cũ.</p>
+            </div>
+            <div class="feature-card">
+                <div class="feature-icon"><i data-lucide="zap"></i></div>
+                <h3>Tốc Độ Crawl Siêu Tốc</h3>
+                <p>Công nghệ lập trình bất tuần tự (async/await) giúp cào đồng thời hàng chục luồng dữ liệu, nâng cao năng suất gấp 5 lần.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparison Matrix Section -->
+    <section id="comparison" class="comparison-section container">
+        <div class="section-header">
+            <h2>So sánh chi tiết các gói bản quyền</h2>
+            <p>Chi tiết các thông số kỹ thuật và hạn mức tài nguyên của từng gói dịch vụ.</p>
+        </div>
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Tính Năng So Sánh</th>
+                        <th>Gói Basic</th>
+                        <th>Gói Pro (Khuyên Dùng)</th>
+                        <th>Gói Unlimited</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>Hạn mức URLs cào / ngày</strong></td>
+                        <td>50 URLs</td>
+                        <td>500 URLs</td>
+                        <td>Không giới hạn</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Số luồng cào đồng thời</strong></td>
+                        <td>1 luồng</td>
+                        <td>5 luồng</td>
+                        <td>20 luồng</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Dung lượng Proxy DataImpulse / tháng</strong></td>
+                        <td>1.0 GB</td>
+                        <td>10.0 GB</td>
+                        <td>50.0 GB</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Bộ cào Tĩnh (Static Parser)</strong></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Bộ cào Động (Playwright JS)</strong></td>
+                        <td class="matrix-no"><i data-lucide="x"></i> Không</td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Bộ cào Ẩn Danh (Stealth Mode)</strong></td>
+                        <td class="matrix-no"><i data-lucide="x"></i> Không</td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Cào hàng loạt (Excel/Sheets/CSV)</strong></td>
+                        <td class="matrix-no"><i data-lucide="x"></i> Không</td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Giới hạn thiết bị kích hoạt (Device Binding)</strong></td>
+                        <td>1 thiết bị</td>
+                        <td>1 thiết bị</td>
+                        <td>1 thiết bị</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Nút Hủy kích hoạt đổi máy tự động</strong></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có (Tối đa 2 lần)</td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có (Tối đa 2 lần)</td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có (Tối đa 2 lần)</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Tự động Fallback IP Local</strong></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Hỗ trợ kỹ thuật</strong></td>
+                        <td>Qua Email</td>
+                        <td class="matrix-yes">Ưu tiên qua Zalo/UltraViewer</td>
+                        <td class="matrix-yes">Kỹ sư hỗ trợ 24/7 riêng biệt</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Pricing Section -->
+    <section id="pricing" class="pricing container">
+        <div class="section-header">
+            <h2>Bảng giá gói đăng ký</h2>
+            <p>Chọn gói bản quyền phù hợp để mở khóa sức mạnh cào dữ liệu của bạn.</p>
+        </div>
+
+        <!-- Duration Picker -->
+        <div class="duration-selector">
+            <button class="duration-btn active" onclick="setDuration(1)">1 Tháng</button>
+            <button class="duration-btn" onclick="setDuration(3)">3 Tháng (-10%)</button>
+            <button class="duration-btn" onclick="setDuration(6)">6 Tháng (-15%)</button>
+            <button class="duration-btn" onclick="setDuration(12)">1 Năm (-20%)</button>
+        </div>
+
+        <div class="pricing-grid">
+            <!-- Basic Plan -->
+            <div class="pricing-card">
+                <div class="plan-header">
+                    <div class="plan-title">⚡ Basic</div>
+                    <p style="color: var(--text-secondary); font-size: 13px;">Dành cho nhu cầu nghiên cứu & cào dữ liệu nhỏ</p>
+                    <div class="plan-price-box">
+                        <span class="plan-price" id="price-basic">149,000đ</span>
+                        <span class="plan-period">/ chu kỳ</span>
+                    </div>
+                    <div class="plan-price-discounted" id="discount-basic"></div>
+                </div>
+                <ul class="plan-features-list">
+                    <li><i data-lucide="check" style="width: 16px;"></i> 50 URLs cào mỗi ngày</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> 1 Luồng cào đồng thời</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> Bộ cào Tĩnh & Tự động</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> 1 GB Băng thông Proxy DataImpulse</li>
+                    <li class="disabled"><i data-lucide="x" style="width: 16px;"></i> Hỗ trợ cào hàng loạt (Excel/Sheets)</li>
+                    <li class="disabled"><i data-lucide="x" style="width: 16px;"></i> Bộ cào Ẩn danh (Stealth Playwright)</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> Hỗ trợ Fallback IP Local tự động</li>
+                </ul>
+                <button onclick="openCheckout('basic')" class="btn btn-secondary btn-buy">Mua gói ngay</button>
+            </div>
+
+            <!-- Pro Plan -->
+            <div class="pricing-card recommended">
+                <div class="plan-header">
+                    <div class="plan-title">⭐ Pro</div>
+                    <p style="color: var(--text-secondary); font-size: 13px;">Gói phổ biến nhất cho người làm Marketing & MMO</p>
+                    <div class="plan-price-box">
+                        <span class="plan-price" id="price-pro">699,000đ</span>
+                        <span class="plan-period">/ chu kỳ</span>
+                    </div>
+                    <div class="plan-price-discounted" id="discount-pro"></div>
+                </div>
+                <ul class="plan-features-list">
+                    <li><i data-lucide="check" style="width: 16px;"></i> 500 URLs cào mỗi ngày</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> 5 Luồng cào đồng thời</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> Tất cả Fetcher (Tĩnh, Động, Ẩn danh)</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> 10 GB Băng thông Proxy DataImpulse</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> Nhập tệp Excel/Google Sheets hàng loạt</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> Trích xuất cấu trúc Catalog sản phẩm</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> Hỗ trợ kĩ thuật ưu tiên Zalo</li>
+                </ul>
+                <button onclick="openCheckout('pro')" class="btn btn-primary btn-buy">Mua gói ngay</button>
+            </div>
+
+            <!-- Unlimited Plan -->
+            <div class="pricing-card">
+                <div class="plan-header">
+                    <div class="plan-title">💎 Unlimited</div>
+                    <p style="color: var(--text-secondary); font-size: 13px;">Dành cho các doanh nghiệp, quy mô khai thác lớn</p>
+                    <div class="plan-price-box">
+                        <span class="plan-price" id="price-unlimited">1,499,000đ</span>
+                        <span class="plan-period">/ chu kỳ</span>
+                    </div>
+                    <div class="plan-price-discounted" id="discount-unlimited"></div>
+                </div>
+                <ul class="plan-features-list">
+                    <li><i data-lucide="check" style="width: 16px;"></i> Không giới hạn URLs cào hàng ngày</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> 20 Luồng cào đồng thời</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> Đầy đủ tính năng cao cấp nhất</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> 50 GB Băng thông Proxy DataImpulse</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> Cào hàng loạt không giới hạn tệp</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> Tự động phân loại dữ liệu theo nhóm</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> Hỗ trợ riêng biệt UltraViewer 24/7</li>
+                </ul>
+                <button onclick="openCheckout('unlimited')" class="btn btn-secondary btn-buy">Mua gói ngay</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="faq-section container">
+        <div class="section-header">
+            <h2>Câu hỏi thường gặp (FAQ)</h2>
+            <p>Giải đáp các thắc mắc về quá trình sử dụng bản quyền, proxy và cài đặt.</p>
+        </div>
+
+        <div class="faq-grid">
+            <div class="faq-item">
+                <div class="faq-header" onclick="toggleFaq(event)">
+                    <h3>Tôi có thể chuyển đổi License Key sang máy khác sử dụng không?</h3>
+                    <i data-lucide="chevron-down" class="faq-icon"></i>
+                </div>
+                <div class="faq-body">
+                    Có. Trình cào dữ liệu WebHarvest hỗ trợ cơ chế unbinding tự động. Tại giao diện Cài đặt trên ứng dụng Desktop, bạn chỉ cần click nút "Hủy Kích Hoạt Thiết Bị". Hệ thống sẽ giải phóng key của bạn khỏi phần cứng máy hiện tại và cho phép bạn kích hoạt trên máy mới (Mỗi Key hỗ trợ unbind tối đa 2 lần trước khi cần admin hỗ trợ reset).
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-header" onclick="toggleFaq(event)">
+                    <h3>Dung lượng Proxy DataImpulse tính phí thế nào?</h3>
+                    <i data-lucide="chevron-down" class="faq-icon"></i>
+                </div>
+                <div class="faq-body">
+                    Mỗi gói bản quyền được tặng kèm dung lượng băng thông Proxy xoay dân cư tốc độ cao định kỳ hàng tháng (Basic: 1GB, Pro: 10GB, Unlimited: 50GB). Băng thông này chỉ bị trừ khi bạn tiến hành cào dữ liệu qua hệ thống Proxy. Nếu hết băng thông, hệ thống sẽ tự động chuyển sang IP Local (IP nhà của bạn) để đảm bảo không bị dừng chương trình.
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-header" onclick="toggleFaq(event)">
+                    <h3>Tại sao tôi nên chọn cào bằng Stealth Mode?</h3>
+                    <i data-lucide="chevron-down" class="faq-icon"></i>
+                </div>
+                <div class="faq-body">
+                    Chế độ Stealth Mode khởi chạy trình duyệt Chromium đã được tối ưu hóa đặc biệt nhằm vượt qua các thuật toán chống bot nâng cao (như Cloudflare Challenge, Akamai, Datadome). Khi trang web bạn cào chặn các truy cập thông thường, Stealth Mode kết hợp cùng Proxy xoay dân cư sẽ là giải pháp cào an toàn nhất.
+                </div>
+            </div>
+            <div class="faq-item">
+                <div class="faq-header" onclick="toggleFaq(event)">
+                    <h3>Tôi có nhận được License Key ngay lập tức sau khi thanh toán không?</h3>
+                    <i data-lucide="chevron-down" class="faq-icon"></i>
+                </div>
+                <div class="faq-body">
+                    Có. Ngay khi bạn chuyển khoản thành công bằng mã QR qua cổng PayOS, Webhook của hệ thống sẽ tự động ghi nhận giao dịch, sinh mã License Key và gửi thông báo trực tiếp qua địa chỉ Email bạn đã đăng ký. Đồng thời, trang kết quả thanh toán trên trình duyệt của bạn sẽ tự động hiển thị License Key để bạn sao chép ngay.
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download Section -->
+    <section id="download" class="download-section">
+        <div class="container">
+            <h2>Tải ứng dụng WebHarvest Desktop</h2>
+            <p style="color: var(--text-secondary); max-width: 600px; margin: 16px auto 0;">Tương thích hoàn toàn với các hệ điều hành phổ biến nhất. Tải về và chạy ngay.</p>
+            
+            <div class="download-cards">
+                <div class="download-card">
+                    <i data-lucide="monitor"></i>
+                    <h3>Windows</h3>
+                    <p>Yêu cầu Windows 10/11 x64</p>
+                    <a href="/download/win" class="btn btn-primary" style="margin-top: 12px; width: 100%; justify-content: center;">Tải Setup (.exe)</a>
+                </div>
+                <div class="download-card">
+                    <i data-lucide="laptop"></i>
+                    <h3>macOS</h3>
+                    <p>Intel & Apple Silicon (M1/M2/M3)</p>
+                    <a href="/download/mac" class="btn btn-secondary" style="margin-top: 12px; width: 100%; justify-content: center;">Tải Disk Image (.dmg)</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Checkout Modal -->
+    <div id="checkout-modal" class="modal">
+        <div class="modal-card">
+            <button class="close-modal" onclick="closeCheckout()">&times;</button>
+            <div class="modal-header">
+                <h3 id="modal-plan-title">Thanh toán</h3>
+                <p>Nhập thông tin nhận License Key bản quyền</p>
+            </div>
+            
+            <div id="checkout-error" class="checkout-error"></div>
+
+            <form id="checkout-form" onsubmit="submitCheckout(event)">
+                <div class="form-group">
+                    <label for="buyer-name">Họ và tên</label>
+                    <input type="text" id="buyer-name" placeholder="Nguyễn Văn A" required>
+                </div>
+                <div class="form-group">
+                    <label for="buyer-email">Địa chỉ Email</label>
+                    <input type="email" id="buyer-email" placeholder="email@example.com" required>
+                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: 6px;">* Vui lòng nhập đúng Email để nhận key bản quyền tự động.</p>
+                </div>
+                
+                <div class="checkout-summary">
+                    <span class="summary-label" id="summary-duration">Chu kỳ: 1 tháng</span>
+                    <span class="summary-value" id="summary-price">149,000đ</span>
+                </div>
+
+                <button type="submit" id="btn-submit-payment" class="btn btn-primary" style="width: 100%; justify-content: center;">
+                    <i data-lucide="credit-card"></i>
+                    <span>Thanh toán qua cổng PayOS</span>
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <a href="#" class="footer-logo">
+                <i data-lucide="sprout"></i>
+                <span>WebHarvest</span>
+            </a>
+            <p>© 2026 WebHarvest Inc. Bản quyền được bảo lưu.</p>
+        </div>
+    </footer>
+
+    <!-- Logic Script -->
+    <script>
+        // Pricing matrix from python config
+        const pricingMatrix = {
+            basic: { 1: 149000, 3: 402300, 6: 759900, 12: 1430400 },
+            pro: { 1: 699000, 3: 1887300, 6: 3564900, 12: 6710400 },
+            unlimited: { 1: 1499000, 3: 4047300, 6: 7649900, 12: 14390400 }
+        };
+
+        const tierNames = {
+            basic: '⚡ Basic Plan',
+            pro: '⭐ Pro Plan',
+            unlimited: '💎 Unlimited Plan'
+        };
+
+        let currentDuration = 1;
+        let selectedTier = 'pro';
+
+        function formatVND(amount) {
+            return amount.toLocaleString('vi-VN') + 'đ';
+        }
+
+        function setDuration(months) {
+            currentDuration = months;
+            const buttons = document.querySelectorAll('.duration-btn');
+            buttons.forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            updatePricingDisplay();
+        }
+
+        function updatePricingDisplay() {
+            Object.keys(pricingMatrix).forEach(tier => {
+                const totalAmount = pricingMatrix[tier][currentDuration];
+                const priceEl = document.getElementById(`price-${tier}`);
+                const discountEl = document.getElementById(`discount-${tier}`);
+
+                if (priceEl) priceEl.textContent = formatVND(totalAmount);
+
+                if (discountEl) {
+                    if (currentDuration > 1) {
+                        const monthlyEquivalent = Math.round(totalAmount / currentDuration);
+                        discountEl.textContent = `Tương đương ${formatVND(monthlyEquivalent)}/tháng`;
+                    } else {
+                        discountEl.textContent = '';
+                    }
+                }
+            });
+        }
+
+        function openCheckout(tier) {
+            selectedTier = tier;
+            const modal = document.getElementById('checkout-modal');
+            const planTitleEl = document.getElementById('modal-plan-title');
+            const summaryDurationEl = document.getElementById('summary-duration');
+            const summaryPriceEl = document.getElementById('summary-price');
+            
+            if (planTitleEl) planTitleEl.textContent = `Đăng ký ${tierNames[tier]}`;
+            
+            const durationLabel = currentDuration === 12 ? '1 năm' : `${currentDuration} tháng`;
+            if (summaryDurationEl) summaryDurationEl.textContent = `Chu kỳ đăng ký: ${durationLabel}`;
+            
+            const totalAmount = pricingMatrix[tier][currentDuration];
+            if (summaryPriceEl) summaryPriceEl.textContent = formatVND(totalAmount);
+
+            const errEl = document.getElementById('checkout-error');
+            if (errEl) errEl.style.display = 'none';
+
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closeCheckout() {
+            const modal = document.getElementById('checkout-modal');
+            if (modal) modal.style.display = 'none';
+        }
+
+        async function submitCheckout(event) {
+            event.preventDefault();
+            const buyerName = document.getElementById('buyer-name').value.trim();
+            const buyerEmail = document.getElementById('buyer-email').value.trim();
+            const errEl = document.getElementById('checkout-error');
+            
+            if (!buyerName || !buyerEmail) {
+                showError('Vui lòng điền đầy đủ họ tên và email.');
+                return;
+            }
+
+            if (errEl) errEl.style.display = 'none';
+            setLoading(true);
+
+            try {
+                const resp = await fetch('/api/payments/create-link', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        tier: selectedTier,
+                        duration_months: currentDuration,
+                        buyer_name: buyerName,
+                        buyer_email: buyerEmail,
+                        return_url: window.location.origin + '/return.html',
+                        cancel_url: window.location.href
+                    })
+                });
+
+                const result = await resp.json();
+                if (result.success && result.data && result.data.checkout_url) {
+                    window.location.href = result.data.checkout_url;
+                } else {
+                    showError(result.detail || result.error || 'Tạo link thanh toán thất bại.');
+                    setLoading(false);
+                }
+            } catch (e) {
+                showError('Lỗi kết nối đến server.');
+                setLoading(false);
+            }
+        }
+
+        function showError(msg) {
+            const errEl = document.getElementById('checkout-error');
+            if (errEl) {
+                errEl.textContent = msg;
+                errEl.style.display = 'block';
+            }
+        }
+
+        function setLoading(isLoading) {
+            const btnSubmit = document.getElementById('btn-submit-payment');
+            if (!btnSubmit) return;
+            if (isLoading) {
+                btnSubmit.disabled = true;
+                btnSubmit.style.opacity = '0.7';
+                btnSubmit.querySelector('span').textContent = 'Đang khởi tạo thanh toán...';
+            } else {
+                btnSubmit.disabled = false;
+                btnSubmit.style.opacity = '1';
+                btnSubmit.querySelector('span').textContent = 'Thanh toán qua cổng PayOS';
+            }
+        }
+
+        // Live Simulation Playground Script
+        const simTemplates = {
+            shopee: {
+                url: 'https://shopee.vn/product-sample-detail-i.12039.4019',
+                logs: [
+                    { type: 'info', text: '[System] Khởi động trình cào dữ liệu WebHarvest...' },
+                    { type: 'info', text: '[System] Chế độ cào: Dynamic JS Fetcher (Playwright).' },
+                    { type: 'info', text: '[System] Đang kết nối tới Proxy xoay dân cư DataImpulse...' },
+                    { type: 'success', text: '[Proxy] Đã nhận IP: 185.220.101.42 (Hanoi, Vietnam).' },
+                    { type: 'info', text: '[Browser] Đang mở trang: https://shopee.vn/product-sample-detail-i.12039.4019' },
+                    { type: 'warning', text: '[Cloudflare] Đang vượt qua kiểm tra bảo mật (Bypass Challenge)...' },
+                    { type: 'success', text: '[Cloudflare] Bypass thành công trong 1.8s.' },
+                    { type: 'info', text: '[Browser] Cuộn trang tự động để tải hình ảnh (Lazy Load)...' },
+                    { type: 'success', text: '[Parser] Đã trích xuất: Tên sản phẩm: "Áo khoác gió thời trang".' },
+                    { type: 'success', text: '[Parser] Đã trích xuất: Giá: 299,000đ | Kho hàng: 142.' },
+                    { type: 'success', text: '[Parser] Tìm thấy 6 hình ảnh sản phẩm độ phân giải cao.' },
+                    { type: 'info', text: '[Downloader] Đang tải ảnh xuống thư mục cục bộ...' },
+                    { type: 'success', text: '[Downloader] Đã tải thành công 6/6 ảnh.' },
+                    { type: 'success', text: '[Exporter] Đã xuất file Excel dữ liệu: /output/shopee_products.xlsx' },
+                    { type: 'success', text: '[System] Tiến trình hoàn tất thành công trong 6.4s.' }
+                ]
+            },
+            pinterest: {
+                url: 'https://pinterest.com/pin/sample-image-board-10294',
+                logs: [
+                    { type: 'info', text: '[System] Khởi động trình cào dữ liệu WebHarvest...' },
+                    { type: 'info', text: '[System] Chế độ cào: Stealth Mode (Bypass bot detection).' },
+                    { type: 'info', text: '[System] Kết nối qua Proxy DataImpulse: IP: 93.115.95.12 (Tokyo, Japan).' },
+                    { type: 'info', text: '[Browser] Đang mở URL Pinterest...' },
+                    { type: 'success', text: '[Browser] Trang Pinterest tải thành công.' },
+                    { type: 'info', text: '[Parser] Tìm kiếm các liên kết hình ảnh gốc trong Gallery Grid...' },
+                    { type: 'success', text: '[Parser] Trích xuất thành công 24 ảnh độ phân giải cao.' },
+                    { type: 'info', text: '[Downloader] Đang tải song song 24 ảnh...' },
+                    { type: 'success', text: '[Downloader] Tải thành công 24 ảnh. (Tốc độ TB: 4.8MB/s).' },
+                    { type: 'success', text: '[System] Cào dữ liệu hoàn tất trong 4.2s.' }
+                ]
+            },
+            shopify: {
+                url: 'https://sample-store.myshopify.com/collections/all',
+                logs: [
+                    { type: 'info', text: '[System] Khởi động trình cào dữ liệu WebHarvest...' },
+                    { type: 'info', text: '[System] Chế độ cào: Static Parser (httpx - Tốc độ cực hạn).' },
+                    { type: 'info', text: '[System] Bỏ qua Proxy (sử dụng IP Local để tối ưu hóa tốc độ).' },
+                    { type: 'info', text: '[Static] Đang gửi yêu cầu GET HTTP...' },
+                    { type: 'success', text: '[Static] Server phản hồi: 200 OK trong 180ms.' },
+                    { type: 'info', text: '[Parser] Phân tích cây DOM HTML...' },
+                    { type: 'success', text: '[Parser] Tìm thấy cấu trúc Catalog của 50 sản phẩm.' },
+                    { type: 'success', text: '[Parser] Trích xuất thành công: Tên, Giá, SKU, Biến thể và Ảnh.' },
+                    { type: 'success', text: '[Exporter] Đã xuất file Excel dữ liệu: /output/shopify_all.xlsx' },
+                    { type: 'success', text: '[System] Hoàn tất 50 sản phẩm trong 1.5s.' }
+                ]
+            }
+        };
+
+        function changeSimTemplate() {
+            const template = document.getElementById('sim-template').value;
+            const urlInput = document.getElementById('sim-url');
+            if (simTemplates[template]) {
+                urlInput.value = simTemplates[template].url;
+            }
+        }
+
+        let simInterval = null;
+        function startSimulation() {
+            const template = document.getElementById('sim-template').value;
+            const consoleScreen = document.getElementById('sim-console-screen');
+            const data = simTemplates[template];
+            
+            if (!data) return;
+            
+            // Clear current console
+            consoleScreen.innerHTML = '';
+            
+            if (simInterval) clearInterval(simInterval);
+            
+            let logIndex = 0;
+            simInterval = setInterval(() => {
+                if (logIndex < data.logs.length) {
+                    const log = data.logs[logIndex];
+                    const lineEl = document.createElement('div');
+                    lineEl.className = `sim-console-line ${log.type || ''}`;
+                    lineEl.textContent = log.text;
+                    consoleScreen.appendChild(lineEl);
+                    consoleScreen.scrollTop = consoleScreen.scrollHeight;
+                    logIndex++;
+                } else {
+                    clearInterval(simInterval);
+                }
+            }, 550);
+        }
+
+        // FAQ accordion toggle logic
+        function toggleFaq(event) {
+            const header = event.currentTarget;
+            const item = header.parentElement;
+            const body = item.querySelector('.faq-body');
+            
+            const isActive = item.classList.contains('active');
+            
+            // Close all items first
+            document.querySelectorAll('.faq-item').forEach(i => {
+                i.classList.remove('active');
+                i.querySelector('.faq-body').style.maxHeight = null;
+            });
+
+            if (!isActive) {
+                item.classList.add('active');
+                body.style.maxHeight = body.scrollHeight + "px";
+            }
+        }
+
+        // Initialize Lucide icons on DOM content loaded
+        document.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+            updatePricingDisplay();
+        });
+    </script>
+</body>
+</html>

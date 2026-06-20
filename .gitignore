@@ -14,7 +14,10 @@ build/
 .venv/
 venv/
 env/
-.env/
+.env
+.license_cache.json
+output_demo_products/
+output_products/
 
 # IDE
 .idea/

@@ -64,7 +64,7 @@ class ValidationResult:
     max_concurrent: int = 0
     batch_crawl: bool = False
     stealth_mode: bool = False
-    proxy_support: bool = False
+    proxy_quota_gb: float = 0
     allowed_fetchers: list = None
     daily_urls_used: int = 0
     daily_urls_remaining: int = 0
@@ -86,7 +86,7 @@ class ValidationResult:
                 "max_concurrent": self.max_concurrent,
                 "batch_crawl": self.batch_crawl,
                 "stealth_mode": self.stealth_mode,
-                "proxy_support": self.proxy_support,
+                "proxy_quota_gb": self.proxy_quota_gb,
                 "allowed_fetchers": self.allowed_fetchers,
                 "daily_urls_used": self.daily_urls_used,
                 "daily_urls_remaining": self.daily_urls_remaining,

@@ -26,6 +26,8 @@ _mock_key_by_str: Dict[str, dict] = {}
 _mock_logs: List[dict] = []
 _mock_daily_usage: Dict[str, int] = {}  # "key_id:date" -> urls_crawled
 _mock_tx: Dict[int, dict] = {}  # order_code -> tx_dict
+_mock_proxy_sessions: Dict[str, dict] = {}  # session_id -> session_dict
+_mock_bandwidth: Dict[str, int] = {}  # "key:month" -> bytes_used
 
 _key_id_seq = 1
 _log_id_seq = 1
@@ -107,6 +109,30 @@ CREATE INDEX IF NOT EXISTS idx_logs_created ON request_logs(created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_daily_key_date ON daily_usage(key_id, date);
 CREATE INDEX IF NOT EXISTS idx_tx_status ON payment_transactions(status);
 CREATE INDEX IF NOT EXISTS idx_tx_created ON payment_transactions(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS proxy_sessions (
+    id              SERIAL PRIMARY KEY,
+    session_id      VARCHAR(50) UNIQUE NOT NULL,
+    license_key     VARCHAR(30) NOT NULL,
+    target_domain   VARCHAR(255),
+    bytes_used      BIGINT DEFAULT 0,
+    status          VARCHAR(20) DEFAULT 'active'
+                    CHECK(status IN ('active','success','fail','timeout','blocked')),
+    acquired_at     TIMESTAMPTZ DEFAULT NOW(),
+    released_at     TIMESTAMPTZ
+);
+
+CREATE TABLE IF NOT EXISTS bandwidth_usage (
+    id              SERIAL PRIMARY KEY,
+    license_key     VARCHAR(30) NOT NULL,
+    month           VARCHAR(7) NOT NULL,
+    bytes_used      BIGINT DEFAULT 0,
+    UNIQUE(license_key, month)
+);
+
+CREATE INDEX IF NOT EXISTS idx_proxy_sessions_key ON proxy_sessions(license_key);
+CREATE INDEX IF NOT EXISTS idx_proxy_sessions_status ON proxy_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_bandwidth_key_month ON bandwidth_usage(license_key, month);
 """
 
 
@@ -137,7 +163,7 @@ def _setup_mock_data():
 
     # Key 1: Unused Basic
     k1 = {
-        "id": 1, "key": "WH-ABCDE-12345-FGHIJ-67890", "tier": "basic", "duration_months": 1,
+        "id": 1, "key": "WH-ABCDE-23456-FGHJK-78923", "tier": "basic", "duration_months": 1,
         "status": "unused", "amount_vnd": 99000, "owner_email": "demo@webharvest.vn", "owner_name": "Nguyen Van A",
         "device_id": None, "device_name": None, "rebind_count": 0, "created_at": now - timedelta(days=2),
         "activated_at": None, "expires_at": None, "last_validated": None, "order_code": 10001,
@@ -148,7 +174,7 @@ def _setup_mock_data():
 
     # Key 2: Active Pro
     k2 = {
-        "id": 2, "key": "WH-PROXX-99999-XXXXX-11111", "tier": "pro", "duration_months": 3,
+        "id": 2, "key": "WH-PR2XX-99999-XXXXX-22222", "tier": "pro", "duration_months": 3,
         "status": "active", "amount_vnd": 1347300, "owner_email": "pro@webharvest.vn", "owner_name": "Tran Van B",
         "device_id": "test_device_fingerprint_id", "device_name": "Windows PC / Chrome", "rebind_count": 0,
         "created_at": now - timedelta(days=30), "activated_at": now - timedelta(days=29),
@@ -162,7 +188,7 @@ def _setup_mock_data():
 
     # Key 3: Expired Unlimited
     k3 = {
-        "id": 3, "key": "WH-UNLIM-88888-YYYYY-22222", "tier": "unlimited", "duration_months": 1,
+        "id": 3, "key": "WH-UN222-88888-YYYYY-33333", "tier": "unlimited", "duration_months": 1,
         "status": "expired", "amount_vnd": 899000, "owner_email": "expired@webharvest.vn", "owner_name": "Le Van C",
         "device_id": "old_laptop_id", "device_name": "Macbook Air", "rebind_count": 1,
         "created_at": now - timedelta(days=40), "activated_at": now - timedelta(days=40),
@@ -262,6 +288,11 @@ async def activate_key(key: str, device_id: str, device_name: str = None) -> dic
         if row["status"] == "active":
             if row["device_id"] == device_id:
                 return row
+            if row["device_id"] is None:
+                row["device_id"] = device_id
+                row["device_name"] = device_name
+                row["last_validated"] = now
+                return row
             return None
         if row["status"] != "unused":
             return None
@@ -285,6 +316,15 @@ async def activate_key(key: str, device_id: str, device_name: str = None) -> dic
             # Already active — check device match
             if row["device_id"] == device_id:
                 return dict(row)
+            if row["device_id"] is None:
+                updated = await conn.fetchrow(
+                    """UPDATE license_keys
+                       SET device_id=$2, device_name=$3, last_validated=$4
+                       WHERE key=$1 AND status='active' AND device_id IS NULL
+                       RETURNING *""",
+                    key, device_id, device_name, now
+                )
+                return dict(updated) if updated else None
             return None
 
         if row["status"] != "unused":
@@ -297,7 +337,7 @@ async def activate_key(key: str, device_id: str, device_name: str = None) -> dic
                    activated_at=$4, expires_at=$5, last_validated=$4
                WHERE key=$1 AND status='unused'
                RETURNING *""",
-            key, device_id, device_name, now, expires_at,
+               key, device_id, device_name, now, expires_at,
         )
         return dict(updated) if updated else None
 
@@ -371,6 +411,38 @@ async def rebind_key(key: str, new_device_id: str, new_device_name: str = None) 
                WHERE key=$1 AND status='active'
                RETURNING *""",
             key, new_device_id, new_device_name,
+        )
+        return dict(updated) if updated else None
+
+
+async def deactivate_key_device(key: str, device_id: str) -> dict | None:
+    """Deactivate a key by clearing its device binding if the device matches."""
+    global is_mock
+    if is_mock:
+        row = _mock_key_by_str.get(key)
+        if not row or row["status"] != "active":
+            return None
+        if row["device_id"] != device_id:
+            return None
+        row["device_id"] = None
+        row["device_name"] = None
+        return row
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT * FROM license_keys WHERE key=$1 AND status='active'", key
+        )
+        if not row:
+            return None
+        if row["device_id"] != device_id:
+            return None
+
+        updated = await conn.fetchrow(
+            """UPDATE license_keys
+               SET device_id=NULL, device_name=NULL
+               WHERE key=$1 AND status='active' AND device_id=$2
+               RETURNING *""",
+            key, device_id
         )
         return dict(updated) if updated else None
 
@@ -1007,3 +1079,198 @@ async def get_revenue_report(group_by: str = "day", date_from: str = None, date_
             *params,
         )
         return [dict(r) for r in rows]
+
+
+# ── Proxy Sessions & Bandwidth ───────────────────────────────────────────
+
+async def create_proxy_session(
+    session_id: str, license_key: str, target_domain: str = "",
+) -> dict:
+    """Create a new proxy session record."""
+    global is_mock
+    now = datetime.now(timezone.utc)
+
+    if is_mock:
+        session = {
+            "session_id": session_id,
+            "license_key": license_key,
+            "target_domain": target_domain,
+            "bytes_used": 0,
+            "status": "active",
+            "acquired_at": now,
+            "released_at": None,
+        }
+        _mock_proxy_sessions[session_id] = session
+        return session
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO proxy_sessions (session_id, license_key, target_domain)
+               VALUES ($1, $2, $3)
+               RETURNING *""",
+            session_id, license_key, target_domain,
+        )
+        return dict(row)
+
+
+async def update_proxy_session(
+    session_id: str, bytes_used: int = 0, status: str = "success",
+) -> bool:
+    """Update a proxy session with usage data and mark as released."""
+    global is_mock
+    now = datetime.now(timezone.utc)
+
+    if is_mock:
+        session = _mock_proxy_sessions.get(session_id)
+        if session:
+            session["bytes_used"] = bytes_used
+            session["status"] = status
+            session["released_at"] = now
+            return True
+        return False
+
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """UPDATE proxy_sessions
+               SET bytes_used=$2, status=$3, released_at=$4
+               WHERE session_id=$1""",
+            session_id, bytes_used, status, now,
+        )
+        return result == "UPDATE 1"
+
+
+async def get_bandwidth_usage(license_key: str, month: str = None) -> int:
+    """Get total bytes used by a license key for a given month."""
+    global is_mock
+    if month is None:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+
+    if is_mock:
+        return _mock_bandwidth.get(f"{license_key}:{month}", 0)
+
+    async with pool.acquire() as conn:
+        val = await conn.fetchval(
+            "SELECT bytes_used FROM bandwidth_usage WHERE license_key=$1 AND month=$2",
+            license_key, month,
+        )
+        return val or 0
+
+
+async def increment_bandwidth(license_key: str, bytes_used: int, month: str = None) -> int:
+    """Increment bandwidth usage for a license key."""
+    global is_mock
+    if month is None:
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+
+    if is_mock:
+        ck = f"{license_key}:{month}"
+        current = _mock_bandwidth.get(ck, 0)
+        _mock_bandwidth[ck] = current + bytes_used
+        return _mock_bandwidth[ck]
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """INSERT INTO bandwidth_usage (license_key, month, bytes_used)
+               VALUES ($1, $2, $3)
+               ON CONFLICT (license_key, month)
+               DO UPDATE SET bytes_used = bandwidth_usage.bytes_used + $3
+               RETURNING bytes_used""",
+            license_key, month, bytes_used,
+        )
+        return row["bytes_used"]
+
+
+async def get_proxy_stats() -> dict:
+    """Get aggregate proxy statistics for admin dashboard."""
+    global is_mock
+
+    if is_mock:
+        sessions = list(_mock_proxy_sessions.values())
+        total_sessions = len(sessions)
+        active_sessions = len([s for s in sessions if s["status"] == "active"])
+        total_bytes = sum(s.get("bytes_used", 0) for s in sessions)
+
+        # Current month bandwidth
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+        month_bytes = sum(v for k, v in _mock_bandwidth.items() if k.endswith(f":{month}"))
+
+        return {
+            "total_sessions": total_sessions,
+            "active_sessions": active_sessions,
+            "total_bytes_used": total_bytes,
+            "total_bytes_gb": round(total_bytes / 1_073_741_824, 3),
+            "month_bytes_used": month_bytes,
+            "month_bytes_gb": round(month_bytes / 1_073_741_824, 3),
+        }
+
+    async with pool.acquire() as conn:
+        total_sessions = await conn.fetchval("SELECT COUNT(*) FROM proxy_sessions")
+        active_sessions = await conn.fetchval(
+            "SELECT COUNT(*) FROM proxy_sessions WHERE status='active'"
+        )
+        total_bytes = await conn.fetchval(
+            "SELECT COALESCE(SUM(bytes_used), 0) FROM proxy_sessions"
+        )
+
+        month = datetime.now(timezone.utc).strftime("%Y-%m")
+        month_bytes = await conn.fetchval(
+            "SELECT COALESCE(SUM(bytes_used), 0) FROM bandwidth_usage WHERE month=$1",
+            month,
+        )
+
+        return {
+            "total_sessions": total_sessions,
+            "active_sessions": active_sessions,
+            "total_bytes_used": total_bytes,
+            "total_bytes_gb": round(total_bytes / 1_073_741_824, 3),
+            "month_bytes_used": month_bytes or 0,
+            "month_bytes_gb": round((month_bytes or 0) / 1_073_741_824, 3),
+        }
+
+
+async def get_proxy_sessions(
+    license_key: str = None, status: str = None,
+    page: int = 1, limit: int = 50,
+) -> tuple[list[dict], int]:
+    """Get proxy session history with optional filters."""
+    global is_mock
+
+    if is_mock:
+        filtered = list(_mock_proxy_sessions.values())
+        if license_key:
+            filtered = [s for s in filtered if s["license_key"] == license_key]
+        if status:
+            filtered = [s for s in filtered if s["status"] == status]
+        filtered.sort(key=lambda x: x["acquired_at"], reverse=True)
+        total = len(filtered)
+        offset = (page - 1) * limit
+        return filtered[offset:offset + limit], total
+
+    conditions = []
+    params = []
+    idx = 1
+
+    if license_key:
+        conditions.append(f"license_key=${ idx}")
+        params.append(license_key)
+        idx += 1
+    if status:
+        conditions.append(f"status=${idx}")
+        params.append(status)
+        idx += 1
+
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+    offset = (page - 1) * limit
+
+    async with pool.acquire() as conn:
+        total = await conn.fetchval(
+            f"SELECT COUNT(*) FROM proxy_sessions {where}", *params
+        )
+        rows = await conn.fetch(
+            f"""SELECT * FROM proxy_sessions {where}
+                ORDER BY acquired_at DESC
+                LIMIT ${idx} OFFSET ${idx+1}""",
+            *params, limit, offset,
+        )
+        return [dict(r) for r in rows], total
+
