@@ -10,6 +10,12 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/static/style.css">
     <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        (function() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        })();
+    </script>
 </head>
 <body>
     <div class="glow-bg"></div>
@@ -23,11 +29,14 @@
             <h1>WebHarvest</h1>
             <p class="tagline">Trình cào và tải ảnh tự động</p>
         </div>
-        <div class="header-right" style="display: flex; align-items: center; gap: 16px;">
-            <div id="license-info-header" style="display: flex; align-items: center; gap: 8px;">
+        <div class="header-right">
+            <button type="button" id="theme-toggle" class="theme-toggle-btn btn-press" title="Chuyển chế độ sáng/tối">
+                <i data-lucide="sun"></i>
+            </button>
+            <div id="license-info-header" class="license-info-header-container">
                 <span id="tier-badge" class="tier-badge" style="display:none"></span>
-                <button type="button" id="btn-manage-license" class="btn-manage-license" onclick="showManageLicense()" style="background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.08); color: #a1a1a6; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; border-radius: 6px; transition: all 0.2s;" title="Quản lý License Key">
-                    <i data-lucide="key" style="width: 13px; height: 13px;"></i>
+                <button type="button" id="btn-manage-license" class="btn-manage-license" onclick="showManageLicense()" title="Quản lý License Key">
+                    <i data-lucide="key"></i>
                     <span>License</span>
                 </button>
             </div>
@@ -348,9 +357,9 @@
                         <form id="product-crawl-form" class="config-form">
                             <div class="form-group">
                                 <label for="product-urls">URL sản phẩm / Danh mục</label>
-                                <div class="input-with-icon" style="position: relative;">
-                                    <i data-lucide="link" style="position: absolute; left: 12px; top: 12px;"></i>
-                                    <textarea id="product-urls" placeholder="Nhập một hoặc nhiều URL (mỗi URL một dòng)...&#10;Ví dụ: https://printify.com/app/products" rows="4" style="width: 100%; border-radius: 12px; border: 1px solid var(--border-color); padding: 12px 12px 12px 40px; background: var(--bg-card); color: var(--text-primary); font-family: inherit; resize: vertical; box-sizing: border-box;"></textarea>
+                                <div class="input-with-icon textarea-container">
+                                    <i data-lucide="link"></i>
+                                    <textarea id="product-urls" placeholder="Nhập một hoặc nhiều URL (mỗi URL một dòng)...&#10;Ví dụ: https://printify.com/app/products" rows="4"></textarea>
                                 </div>
                             </div>
 
@@ -434,27 +443,27 @@
                 </div>
 
                 <!-- Crawled Products Result Grid -->
-                <div class="card gallery-card apple-animate" style="margin-top: 24px;">
+                <div class="card gallery-card products-result-card apple-animate">
                     <div class="card-header">
                         <i data-lucide="database"></i>
                         <h2>Sản phẩm đã cào</h2>
                         <span class="counter" id="product-result-count">0 sản phẩm</span>
                     </div>
-                    <div class="products-grid-container" style="overflow-x: auto; padding: 16px;">
-                        <table class="products-table" style="width: 100%; border-collapse: collapse; text-align: left; color: var(--text-primary);">
+                    <div class="products-grid-container">
+                        <table class="products-table">
                             <thead>
-                                <tr style="border-bottom: 2px solid var(--border-color); font-weight: 600;">
-                                    <th style="padding: 12px; width: 80px;">Ảnh chính</th>
-                                    <th style="padding: 12px;">Tên sản phẩm</th>
-                                    <th style="padding: 12px; width: 100px;">Giá</th>
-                                    <th style="padding: 12px; width: 120px;">Site</th>
-                                    <th style="padding: 12px; width: 100px;">Biến thể</th>
-                                    <th style="padding: 12px; width: 100px;">Chi tiết</th>
+                                <tr>
+                                    <th class="col-img">Ảnh chính</th>
+                                    <th class="col-name">Tên sản phẩm</th>
+                                    <th class="col-price">Giá</th>
+                                    <th class="col-site">Site</th>
+                                    <th class="col-variants">Biến thể</th>
+                                    <th class="col-details">Chi tiết</th>
                                 </tr>
                             </thead>
                             <tbody id="product-table-body">
                                 <tr>
-                                    <td colspan="6" style="padding: 24px; text-align: center; color: var(--text-secondary);">Sản phẩm được cào sẽ hiển thị tại đây...</td>
+                                    <td colspan="6" class="table-empty-row">Sản phẩm được cào sẽ hiển thị tại đây...</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -508,18 +517,18 @@
 
     <!-- License Gate Overlay -->
     <div id="license-gate" class="license-gate" style="display:none">
-        <div class="license-gate-card" style="position: relative;">
-            <button type="button" id="btn-close-license" class="close-license" onclick="hideLicenseGate()" style="display:none; position: absolute; top: 15px; right: 20px; background: none; border: none; color: #a1a1a6; font-size: 28px; cursor: pointer; line-height: 1;" title="Đóng">&times;</button>
+        <div class="license-gate-card">
+            <button type="button" id="btn-close-license" class="close-license" onclick="hideLicenseGate()" style="display:none;" title="Đóng">&times;</button>
             <div class="license-logo">
-                <i data-lucide="sprout" style="width:48px;height:48px;color:#6366f1"></i>
+                <i data-lucide="sprout"></i>
                 <h2>WebHarvest License</h2>
                 <p>Nhập license key để kích hoạt ứng dụng</p>
             </div>
             <div class="license-form">
                 <input type="text" id="license-key-input" placeholder="WH-XXXXX-XXXXX-XXXXX-XXXXX" class="license-input" autocomplete="off" spellcheck="false">
-                <div style="display: flex; gap: 10px; margin-top: 10px; width: 100%;">
-                    <button type="button" onclick="activateLicenseKey()" class="btn btn-primary btn-press" style="flex: 1;">Kích hoạt</button>
-                    <button type="button" id="btn-deactivate-license" onclick="deactivateLicenseKey()" class="btn btn-press" style="flex: 1; display: none; background: #ef4444; color: #fff; border: none; border-radius: 8px; font-weight: 500; font-size: 14px; cursor: pointer; transition: all 0.2s;">Hủy kích hoạt</button>
+                <div class="license-actions">
+                    <button type="button" onclick="activateLicenseKey()" class="btn btn-primary btn-press btn-activate">Kích hoạt</button>
+                    <button type="button" id="btn-deactivate-license" onclick="deactivateLicenseKey()" class="btn btn-press btn-deactivate" style="display: none;">Hủy kích hoạt</button>
                 </div>
                 <p id="license-error" class="license-error" style="display:none"></p>
                 <p id="payment-status" class="payment-status" style="display:none"></p>
@@ -539,9 +548,9 @@
                     <span class="plan-price">899,000đ/tháng</span>
                 </button>
             </div>
-            <div class="device-id-display" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid var(--apple-hairline); text-align: center; font-size: 11px; color: #a1a1a6;">
-                <div style="margin-bottom: 4px;">Thiết bị: <span id="display-device-name" style="font-weight: 500;">Đang tải...</span></div>
-                <div>Device ID: <span id="display-device-id" style="font-family: monospace; font-weight: 500; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; user-select: all;">Đang tải...</span></div>
+            <div class="device-id-display">
+                <div class="device-name-row">Thiết bị: <span id="display-device-name">Đang tải...</span></div>
+                <div class="device-id-row">Device ID: <span id="display-device-id">Đang tải...</span></div>
             </div>
         </div>
     </div>

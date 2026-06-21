@@ -176,7 +176,7 @@ def _setup_mock_data():
     k2 = {
         "id": 2, "key": "WH-PR2XX-99999-XXXXX-22222", "tier": "pro", "duration_months": 3,
         "status": "active", "amount_vnd": 1347300, "owner_email": "pro@webharvest.vn", "owner_name": "Tran Van B",
-        "device_id": "test_device_fingerprint_id", "device_name": "Windows PC / Chrome", "rebind_count": 0,
+        "device_id": "fbb3c01ff3feea372417e9d826707265227faeaaddec153a71e2908cc4353364", "device_name": "Windows PC / Chrome", "rebind_count": 0,
         "created_at": now - timedelta(days=30), "activated_at": now - timedelta(days=29),
         "expires_at": now + timedelta(days=61), "last_validated": now - timedelta(minutes=5),
         "order_code": 10002, "payos_tx_id": "tx_def456", "total_requests": 150, "total_urls": 2800,

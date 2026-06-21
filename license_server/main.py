@@ -806,7 +806,11 @@ _admin_dir = _static_dir / "admin"
 
 
 @app.get("/admin", response_class=HTMLResponse)
-async def admin_page():
+async def admin_page(request: Request):
+    host = request.headers.get("host", "")
+    if host.startswith("api.webharvest"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse("https://webharvest.twentypi.com/admin")
     index = _admin_dir / "index.html"
     if index.exists():
         return HTMLResponse(index.read_text(encoding="utf-8"))
@@ -814,7 +818,11 @@ async def admin_page():
 
 
 @app.get("/", response_class=HTMLResponse)
-async def landing_page():
+async def landing_page(request: Request):
+    host = request.headers.get("host", "")
+    if host.startswith("api.webharvest"):
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse("https://webharvest.twentypi.com")
     index = _static_dir / "index.html"
     if index.exists():
         return HTMLResponse(index.read_text(encoding="utf-8"))

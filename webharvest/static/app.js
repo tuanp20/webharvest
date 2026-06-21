@@ -339,8 +339,39 @@ async function openPurchaseFlow(tier, duration) {
     }
 }
 
+// Theme Toggle Initialization
+function initThemeToggle() {
+    const toggleBtn = document.getElementById('theme-toggle');
+    if (!toggleBtn) return;
+
+    function updateToggleIcon(theme) {
+        const icon = toggleBtn.querySelector('i');
+        if (icon) {
+            if (theme === 'light') {
+                icon.setAttribute('data-lucide', 'moon');
+            } else {
+                icon.setAttribute('data-lucide', 'sun');
+            }
+            if (window.lucide) {
+                window.lucide.createIcons();
+            }
+        }
+    }
+
+    const currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    updateToggleIcon(currentTheme);
+
+    toggleBtn.addEventListener('click', () => {
+        const theme = document.documentElement.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('theme', theme);
+        updateToggleIcon(theme);
+    });
+}
+
 // Initialize Lucide Icons
 document.addEventListener("DOMContentLoaded", () => {
+    initThemeToggle();
     lucide.createIcons();
     initLicenseGate();
     loadHistory();
