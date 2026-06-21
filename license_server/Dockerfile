@@ -3,11 +3,11 @@ FROM python:3.12-slim
 WORKDIR /app
 
 # Install dependencies
-COPY requirements.txt .
+COPY license_server/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source
-COPY . .
+COPY license_server/ license_server/
 
 # Expose port
 EXPOSE 8443

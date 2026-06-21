@@ -18,7 +18,9 @@ services:
       retries: 5
 
   license-server:
-    build: .
+    build:
+      context: ..
+      dockerfile: license_server/Dockerfile
     ports:
       - "8443:8443"
     env_file:
