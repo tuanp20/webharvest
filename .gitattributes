@@ -1,2 +1,0 @@
-license_server/static/downloads/*.exe filter=lfs diff=lfs merge=lfs -text
-license_server/static/downloads/*.dmg filter=lfs diff=lfs merge=lfs -text
