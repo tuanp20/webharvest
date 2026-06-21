@@ -83,6 +83,7 @@ class DataImpulseProxyService:
         
         Format: http://username[__cr.XX][__ses.ID]:password@gw.dataimpulse.com:823
         """
+        from urllib.parse import quote_plus
         parts = [self.username]
         
         # Country targeting
@@ -95,7 +96,11 @@ class DataImpulseProxyService:
             parts.append(f"ses.{sticky_session}")
         
         auth_user = "__".join(parts)
-        return f"http://{auth_user}:{self.password}@{DI_HOST}:{DI_PORT_HTTP}"
+        
+        # Percent-encode to avoid syntax errors in client-side HTTP/proxy clients (e.g. curl_cffi)
+        enc_user = quote_plus(auth_user)
+        enc_pass = quote_plus(self.password)
+        return f"http://{enc_user}:{enc_pass}@{DI_HOST}:{DI_PORT_HTTP}"
 
     async def acquire_session(
         self,
