@@ -16,20 +16,21 @@
     <!-- CSS (Identical Premium Styles) -->
     <style>
         :root {
-            --bg-primary: #030014;
-            --bg-secondary: rgba(255, 255, 255, 0.03);
-            --bg-card: rgba(10, 8, 30, 0.7);
-            --text-primary: #f5f5f7;
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f7;
+            --bg-card: rgba(255, 255, 255, 0.85);
+            --text-primary: #1d1d1f;
             --text-secondary: #86868b;
-            --accent-purple: #818cf8;
-            --accent-pink: #c084fc;
-            --accent-blue: #38bdf8;
-            --success: #34d399;
-            --error: #f87171;
-            --apple-hairline: rgba(255, 255, 255, 0.08);
-            --font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            --gradient-primary: linear-gradient(135deg, #818cf8 0%, #c084fc 50%, #38bdf8 100%);
-            --glow-shadow: 0 0 40px rgba(129, 140, 248, 0.15);
+            --accent-purple: #5e5ce6;
+            --accent-pink: #d33d95;
+            --accent-blue: #0071e3;
+            --success: #28cd41;
+            --error: #ff3b30;
+            --apple-hairline: rgba(0, 0, 0, 0.08);
+            --font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
+            --gradient-primary: var(--accent-blue);
+            --gradient-glow: linear-gradient(135deg, rgba(94, 92, 230, 0.05), rgba(0, 113, 227, 0.02));
+            --glow-shadow: 0 0 50px rgba(94, 92, 230, 0.05);
         }
 
         * {
@@ -58,7 +59,7 @@
             transform: translate(-50%, -50%);
             width: 600px;
             height: 600px;
-            background: radial-gradient(circle, rgba(129, 140, 248, 0.1) 0%, rgba(3, 0, 20, 0) 70%);
+            background: radial-gradient(circle, rgba(94, 92, 230, 0.04) 0%, rgba(255, 255, 255, 0) 70%);
             z-index: -1;
             filter: blur(50px);
             pointer-events: none;
@@ -76,8 +77,9 @@
             border-radius: 24px;
             padding: 48px 40px;
             text-align: center;
-            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.8), var(--glow-shadow);
-            backdrop-filter: blur(10px);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.05), var(--glow-shadow);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
         }
 
         .status-icon {
@@ -92,21 +94,21 @@
         }
 
         .status-icon.loading {
-            background: rgba(129, 140, 248, 0.1);
+            background: rgba(94, 92, 230, 0.1);
             color: var(--accent-purple);
             animation: rotate 2s linear infinite;
         }
 
         .status-icon.success {
-            background: rgba(52, 211, 153, 0.1);
+            background: rgba(40, 205, 65, 0.1);
             color: var(--success);
-            box-shadow: 0 0 20px rgba(52, 211, 153, 0.2);
+            box-shadow: 0 0 20px rgba(40, 205, 65, 0.2);
         }
 
         .status-icon.error {
-            background: rgba(248, 113, 113, 0.1);
+            background: rgba(255, 59, 48, 0.1);
             color: var(--error);
-            box-shadow: 0 0 20px rgba(248, 113, 113, 0.2);
+            box-shadow: 0 0 20px rgba(255, 59, 48, 0.2);
         }
 
         @keyframes rotate {
@@ -128,7 +130,7 @@
 
         /* License Key Display Box */
         .key-container {
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(0, 0, 0, 0.02);
             border: 1px solid var(--apple-hairline);
             border-radius: 12px;
             padding: 16px;
@@ -166,7 +168,7 @@
         }
 
         .btn-copy {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(0, 0, 0, 0.03);
             border: 1px solid var(--apple-hairline);
             color: var(--text-primary);
             padding: 8px;
@@ -179,7 +181,7 @@
         }
 
         .btn-copy:hover {
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(0, 0, 0, 0.06);
         }
 
         .btn {
@@ -199,25 +201,25 @@
 
         .btn-primary {
             background: var(--gradient-primary);
-            color: #030014;
+            color: #ffffff;
             border: none;
-            box-shadow: 0 4px 20px rgba(129, 140, 248, 0.4);
+            box-shadow: 0 4px 15px rgba(0, 113, 227, 0.15);
         }
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(129, 140, 248, 0.6);
+            box-shadow: 0 6px 20px rgba(0, 113, 227, 0.3);
         }
 
         .btn-secondary {
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(0, 0, 0, 0.03);
             color: var(--text-primary);
             border: 1px solid var(--apple-hairline);
             margin-top: 12px;
         }
 
         .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.08);
+            background: rgba(0, 0, 0, 0.06);
         }
 
         .copied-tooltip {

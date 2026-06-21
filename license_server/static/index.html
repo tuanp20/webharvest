@@ -17,22 +17,22 @@
     <!-- Custom CSS (Premium Glassmorphism & Sleek Dark Mode) -->
     <style>
         :root {
-            --bg-primary: #030014;
-            --bg-secondary: rgba(255, 255, 255, 0.02);
-            --bg-card: rgba(10, 8, 30, 0.75);
-            --text-primary: #f5f5f7;
-            --text-secondary: #8e8e93;
-            --accent-purple: #818cf8;
-            --accent-pink: #c084fc;
-            --accent-blue: #38bdf8;
-            --success: #34d399;
-            --error: #f87171;
-            --apple-hairline: rgba(255, 255, 255, 0.08);
+            --bg-primary: #ffffff;
+            --bg-secondary: #f5f5f7;
+            --bg-card: rgba(255, 255, 255, 0.85);
+            --text-primary: #1d1d1f;
+            --text-secondary: #86868b;
+            --accent-purple: #5e5ce6;
+            --accent-pink: #d33d95;
+            --accent-blue: #0071e3;
+            --success: #28cd41;
+            --error: #ff3b30;
+            --apple-hairline: rgba(0, 0, 0, 0.08);
             --font-family: 'Plus Jakarta Sans', -apple-system, sans-serif;
             --font-display: 'Space Grotesk', -apple-system, sans-serif;
-            --gradient-primary: linear-gradient(135deg, #818cf8 0%, #c084fc 50%, #38bdf8 100%);
-            --gradient-glow: linear-gradient(135deg, rgba(129, 140, 248, 0.15), rgba(192, 132, 252, 0.05));
-            --glow-shadow: 0 0 50px rgba(129, 140, 248, 0.12);
+            --gradient-primary: var(--accent-blue);
+            --gradient-glow: linear-gradient(135deg, rgba(94, 92, 230, 0.05), rgba(0, 113, 227, 0.02));
+            --glow-shadow: 0 0 50px rgba(94, 92, 230, 0.05);
         }
 
         * {
@@ -56,14 +56,14 @@
             position: absolute;
             width: 800px;
             height: 800px;
-            background: radial-gradient(circle, rgba(129, 140, 248, 0.08) 0%, rgba(3, 0, 20, 0) 70%);
+            background: radial-gradient(circle, rgba(94, 92, 230, 0.04) 0%, rgba(255, 255, 255, 0) 70%);
             z-index: -1;
             filter: blur(80px);
             pointer-events: none;
         }
         .glow-1 { top: -10%; left: 10%; }
-        .glow-2 { top: 40%; right: -10%; background: radial-gradient(circle, rgba(192, 132, 252, 0.06) 0%, rgba(3, 0, 20, 0) 70%); }
-        .glow-3 { bottom: 5%; left: -10%; background: radial-gradient(circle, rgba(56, 189, 248, 0.06) 0%, rgba(3, 0, 20, 0) 70%); }
+        .glow-2 { top: 40%; right: -10%; background: radial-gradient(circle, rgba(211, 61, 149, 0.03) 0%, rgba(255, 255, 255, 0) 70%); }
+        .glow-3 { bottom: 5%; left: -10%; background: radial-gradient(circle, rgba(0, 113, 227, 0.03) 0%, rgba(255, 255, 255, 0) 70%); }
 
         /* Container */
         .container {
@@ -78,7 +78,7 @@
             top: 0;
             left: 0;
             width: 100%;
-            background: rgba(3, 0, 20, 0.75);
+            background: rgba(255, 255, 255, 0.8);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border-bottom: 1px solid var(--apple-hairline);
@@ -106,7 +106,6 @@
 
         .logo i {
             color: var(--accent-purple);
-            filter: drop-shadow(0 0 10px rgba(129, 140, 248, 0.6));
         }
 
         .nav-links {
@@ -129,12 +128,12 @@
         }
 
         .btn-download-nav {
-            background: var(--gradient-primary);
-            color: #030014 !important;
+            background: var(--accent-blue);
+            color: #ffffff !important;
             padding: 10px 22px;
             border-radius: 99px;
             font-weight: 700 !important;
-            box-shadow: 0 4px 15px rgba(129, 140, 248, 0.3);
+            box-shadow: 0 4px 15px rgba(0, 113, 227, 0.15);
             transition: transform 0.2s, box-shadow 0.2s !important;
         }
 
@@ -174,9 +173,7 @@
             line-height: 1.1;
             letter-spacing: -0.03em;
             margin-bottom: 24px;
-            background: linear-gradient(to right, #ffffff, #c7d2fe, #38bdf8);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: var(--text-primary);
         }
 
         .hero p.subtitle {
@@ -207,26 +204,26 @@
         }
 
         .btn-primary {
-            background: var(--gradient-primary);
-            color: #030014;
+            background: var(--accent-blue);
+            color: #ffffff;
             border: none;
-            box-shadow: 0 4px 20px rgba(129, 140, 248, 0.4);
+            box-shadow: 0 4px 20px rgba(0, 113, 227, 0.15);
         }
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(129, 140, 248, 0.6);
+            box-shadow: 0 8px 25px rgba(0, 113, 227, 0.3);
         }
 
         .btn-secondary {
-            background: rgba(255, 255, 255, 0.04);
+            background: rgba(0, 0, 0, 0.03);
             color: var(--text-primary);
             border: 1px solid var(--apple-hairline);
         }
 
         .btn-secondary:hover {
-            background: rgba(255, 255, 255, 0.08);
-            border-color: rgba(255, 255, 255, 0.15);
+            background: rgba(0, 0, 0, 0.06);
+            border-color: rgba(0, 0, 0, 0.15);
         }
 
         /* Live Simulator Playground Console */
@@ -236,24 +233,35 @@
         }
 
         .simulator-card {
-            background: rgba(10, 8, 30, 0.55);
+            background: var(--bg-card);
             border: 1px solid var(--apple-hairline);
             border-radius: 24px;
             padding: 24px;
-            box-shadow: 0 30px 70px rgba(0, 0, 0, 0.8), var(--glow-shadow);
+            box-shadow: 0 30px 70px rgba(0, 0, 0, 0.06), var(--glow-shadow);
             backdrop-filter: blur(16px);
         }
+
+        /* macOS style window controls */
+        .dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+        .dot-red { background-color: #ff5f56; }
+        .dot-yellow { background-color: #ffbd2e; }
+        .dot-green { background-color: #27c93f; }
 
         .sim-tabs {
             display: flex;
             gap: 12px;
             margin-bottom: 20px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            border-bottom: 1px solid var(--apple-hairline);
             padding-bottom: 16px;
         }
 
         .sim-tab {
-            background: rgba(255, 255, 255, 0.02);
+            background: rgba(0, 0, 0, 0.02);
             border: 1px solid var(--apple-hairline);
             color: var(--text-secondary);
             padding: 8px 16px;
@@ -265,9 +273,9 @@
         }
 
         .sim-tab.active {
-            background: rgba(129, 140, 248, 0.15);
+            background: rgba(94, 92, 230, 0.1);
             color: var(--accent-purple);
-            border-color: rgba(129, 140, 248, 0.3);
+            border-color: rgba(94, 92, 230, 0.3);
         }
 
         .sim-workspace {
@@ -277,8 +285,8 @@
         }
 
         .sim-panel {
-            background: rgba(255, 255, 255, 0.01);
-            border: 1px solid rgba(255, 255, 255, 0.04);
+            background: rgba(0, 0, 0, 0.01);
+            border: 1px solid rgba(0, 0, 0, 0.04);
             border-radius: 12px;
             padding: 20px;
             display: flex;
@@ -289,12 +297,12 @@
         .sim-panel label {
             font-size: 12px;
             font-weight: 700;
-            color: #d1d1d6;
+            color: var(--text-secondary);
         }
 
         .sim-panel input, .sim-panel select {
             width: 100%;
-            background: rgba(255, 255, 255, 0.04);
+            background: rgba(0, 0, 0, 0.02);
             border: 1px solid var(--apple-hairline);
             padding: 10px 14px;
             border-radius: 8px;
@@ -304,16 +312,16 @@
         }
 
         .sim-console {
-            background: #02000a;
-            border: 1px solid rgba(255, 255, 255, 0.05);
+            background: #f5f5f7;
+            border: 1px solid var(--apple-hairline);
             border-radius: 12px;
             padding: 20px;
             font-family: 'Space Grotesk', monospace;
             font-size: 13px;
-            color: #34d399;
+            color: var(--text-primary);
             height: 280px;
             overflow-y: auto;
-            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.03);
         }
 
         .sim-console-line {
@@ -322,8 +330,8 @@
         }
 
         .sim-console-line.info { color: var(--accent-blue); }
-        .sim-console-line.warning { color: #f59e0b; }
-        .sim-console-line.success { color: var(--success); }
+        .sim-console-line.warning { color: #d97706; }
+        .sim-console-line.success { color: #16a34a; }
 
         /* How It Works (Steps) */
         .steps-section {
@@ -348,16 +356,14 @@
         }
 
         .step-card:hover {
-            border-color: rgba(129, 140, 248, 0.3);
+            border-color: rgba(94, 92, 230, 0.3);
         }
 
         .step-number {
             font-family: var(--font-display);
             font-size: 64px;
             font-weight: 800;
-            background: linear-gradient(135deg, rgba(129, 140, 248, 0.3) 0%, rgba(56, 189, 248, 0) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
+            color: rgba(94, 92, 230, 0.15);
             position: absolute;
             top: 20px;
             right: 30px;
@@ -379,7 +385,7 @@
         /* Extractors / Integrations Showcase */
         .showcase-section {
             padding: 80px 0;
-            background: rgba(10, 8, 30, 0.3);
+            background: rgba(0, 0, 0, 0.01);
             border-top: 1px solid var(--apple-hairline);
             border-bottom: 1px solid var(--apple-hairline);
             text-align: center;
@@ -395,7 +401,7 @@
         }
 
         .logo-cloud-item {
-            background: rgba(255, 255, 255, 0.02);
+            background: rgba(0, 0, 0, 0.02);
             border: 1px solid var(--apple-hairline);
             padding: 14px 28px;
             border-radius: 12px;
@@ -409,8 +415,8 @@
         }
 
         .logo-cloud-item:hover {
-            background: rgba(255, 255, 255, 0.05);
-            border-color: rgba(129, 140, 248, 0.3);
+            background: rgba(0, 0, 0, 0.04);
+            border-color: rgba(94, 92, 230, 0.3);
             transform: translateY(-2px);
         }
 
@@ -455,14 +461,14 @@
 
         .feature-card:hover {
             transform: translateY(-5px);
-            border-color: rgba(129, 140, 248, 0.3);
-            box-shadow: 0 10px 30px rgba(129, 140, 248, 0.08);
+            border-color: rgba(94, 92, 230, 0.3);
+            box-shadow: 0 10px 30px rgba(94, 92, 230, 0.05);
         }
 
         .feature-icon {
             width: 52px;
             height: 52px;
-            background: rgba(129, 140, 248, 0.08);
+            background: rgba(94, 92, 230, 0.08);
             border-radius: 12px;
             display: flex;
             align-items: center;
@@ -507,11 +513,11 @@
 
         th, td {
             padding: 18px 24px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            border-bottom: 1px solid var(--apple-hairline);
         }
 
         th {
-            background: rgba(255, 255, 255, 0.01);
+            background: rgba(0, 0, 0, 0.01);
             font-weight: 700;
             color: var(--text-primary);
             font-family: var(--font-display);
@@ -539,7 +545,7 @@
         .duration-selector {
             display: flex;
             justify-content: center;
-            background: rgba(255, 255, 255, 0.03);
+            background: rgba(0, 0, 0, 0.03);
             border: 1px solid var(--apple-hairline);
             padding: 4px;
             border-radius: 99px;
@@ -562,8 +568,8 @@
         }
 
         .duration-btn.active {
-            background: var(--gradient-primary);
-            color: #030014;
+            background: var(--accent-blue);
+            color: #ffffff;
         }
 
         .pricing-grid {
@@ -585,13 +591,13 @@
 
         .pricing-card:hover {
             transform: translateY(-5px);
-            border-color: rgba(129, 140, 248, 0.3);
-            box-shadow: 0 20px 40px rgba(129, 140, 248, 0.1);
+            border-color: rgba(94, 92, 230, 0.3);
+            box-shadow: 0 20px 40px rgba(94, 92, 230, 0.06);
         }
 
         .pricing-card.recommended {
             border-color: var(--accent-purple);
-            box-shadow: 0 0 35px rgba(129, 140, 248, 0.18);
+            box-shadow: 0 0 35px rgba(94, 92, 230, 0.1);
         }
 
         .pricing-card.recommended::before {
@@ -600,8 +606,8 @@
             top: -12px;
             left: 50%;
             transform: translateX(-50%);
-            background: var(--gradient-primary);
-            color: #030014;
+            background: var(--accent-blue);
+            color: #ffffff;
             font-size: 11px;
             font-weight: 800;
             padding: 4px 18px;
@@ -659,7 +665,7 @@
             align-items: center;
             gap: 12px;
             font-size: 14px;
-            color: #d1d1d6;
+            color: var(--text-secondary);
         }
 
         .plan-features-list li i {
@@ -696,7 +702,7 @@
         }
 
         .faq-item {
-            background: rgba(255, 255, 255, 0.01);
+            background: rgba(0, 0, 0, 0.01);
             border: 1px solid var(--apple-hairline);
             border-radius: 12px;
             overflow: hidden;
@@ -732,8 +738,8 @@
         }
 
         .faq-item.active {
-            border-color: rgba(129, 140, 248, 0.25);
-            background: rgba(255, 255, 255, 0.02);
+            border-color: rgba(94, 92, 230, 0.25);
+            background: rgba(0, 0, 0, 0.02);
         }
 
         .faq-item.active .faq-icon {
@@ -747,7 +753,7 @@
         /* Download Section */
         .download-section {
             padding: 100px 0;
-            background: linear-gradient(180deg, rgba(3, 0, 20, 0) 0%, rgba(10, 8, 30, 0.5) 100%);
+            background: var(--bg-secondary);
             border-top: 1px solid var(--apple-hairline);
             text-align: center;
         }
@@ -774,7 +780,7 @@
         }
 
         .download-card:hover {
-            border-color: rgba(129, 140, 248, 0.3);
+            border-color: rgba(94, 92, 230, 0.3);
         }
 
         .download-card i {
@@ -800,7 +806,7 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(3, 0, 20, 0.85);
+            background: rgba(255, 255, 255, 0.8);
             backdrop-filter: blur(12px);
             z-index: 2000;
             align-items: center;
@@ -808,14 +814,14 @@
         }
 
         .modal-card {
-            background: #0d0b21;
+            background: #ffffff;
             border: 1px solid var(--apple-hairline);
             border-radius: 24px;
             padding: 40px;
             width: 100%;
             max-width: 480px;
             position: relative;
-            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5), var(--glow-shadow);
+            box-shadow: 0 20px 50px rgba(0, 0, 0, 0.08), var(--glow-shadow);
         }
 
         .close-modal {
@@ -858,13 +864,13 @@
             display: block;
             font-size: 13px;
             font-weight: 600;
-            color: #d1d1d6;
+            color: var(--text-secondary);
             margin-bottom: 8px;
         }
 
         .form-group input {
             width: 100%;
-            background: rgba(255, 255, 255, 0.05);
+            background: rgba(0, 0, 0, 0.02);
             border: 1px solid var(--apple-hairline);
             padding: 12px 16px;
             border-radius: 10px;
@@ -880,7 +886,7 @@
         }
 
         .checkout-summary {
-            background: rgba(255, 255, 255, 0.02);
+            background: rgba(0, 0, 0, 0.02);
             border: 1px solid var(--apple-hairline);
             border-radius: 12px;
             padding: 16px;
@@ -916,7 +922,7 @@
         footer {
             border-top: 1px solid var(--apple-hairline);
             padding: 60px 0;
-            background: #030014;
+            background: #ffffff;
             color: var(--text-secondary);
             font-size: 14px;
             text-align: center;
@@ -981,14 +987,14 @@
         <!-- Interactive Simulator Card -->
         <div class="simulator-section" id="simulator">
             <div class="simulator-card">
-                <div class="window-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 12px;">
+                <div class="window-header" style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; border-bottom: 1px solid var(--apple-hairline); padding-bottom: 12px;">
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <div class="dot dot-red"></div>
                         <div class="dot dot-yellow"></div>
                         <div class="dot dot-green"></div>
                         <span class="window-title" style="margin-left: 8px;">WebHarvest Sandbox Live Simulation</span>
                     </div>
-                    <span style="font-size: 11px; color: var(--accent-purple); font-weight: 700; background: rgba(129, 140, 248, 0.1); padding: 2px 8px; border-radius: 4px;">LOCAL AGENT</span>
+                    <span style="font-size: 11px; color: var(--accent-purple); font-weight: 700; background: rgba(94, 92, 230, 0.1); padding: 2px 8px; border-radius: 4px;">LOCAL AGENT</span>
                 </div>
                 
                 <div class="sim-workspace">
