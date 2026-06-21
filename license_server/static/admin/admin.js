@@ -143,9 +143,9 @@ function renderTierChart(tiers) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
     const data = [
-        { label: 'Basic', value: tiers.basic || 0, color: '#3b82f6' },
-        { label: 'Pro', value: tiers.pro || 0, color: '#8b5cf6' },
-        { label: 'Unlimited', value: tiers.unlimited || 0, color: '#06b6d4' },
+        { label: 'Basic', value: tiers.basic || 0, color: '#0071e3' },
+        { label: 'Pro', value: tiers.pro || 0, color: '#5e5ce6' },
+        { label: 'Unlimited', value: tiers.unlimited || 0, color: '#d33d95' },
     ];
     const total = data.reduce((s, d) => s + d.value, 0) || 1;
     const barH = 36, gap = 16, startY = 20;
@@ -156,27 +156,27 @@ function renderTierChart(tiers) {
         const barW = Math.max(4, pct * (canvas.width - 140));
 
         // Background bar
-        ctx.fillStyle = 'rgba(255,255,255,0.04)';
+        ctx.fillStyle = 'rgba(0,0,0,0.04)';
         ctx.beginPath();
         ctx.roundRect(0, y, canvas.width - 80, barH, 6);
         ctx.fill();
 
         // Fill bar
         ctx.fillStyle = d.color;
-        ctx.globalAlpha = 0.8;
+        ctx.globalAlpha = 0.85;
         ctx.beginPath();
         ctx.roundRect(0, y, barW, barH, 6);
         ctx.fill();
         ctx.globalAlpha = 1;
 
         // Label
-        ctx.fillStyle = '#e8e8f0';
-        ctx.font = '13px Inter, sans-serif';
+        ctx.fillStyle = '#1d1d1f';
+        ctx.font = '500 13px "Plus Jakarta Sans", -apple-system, sans-serif';
         ctx.fillText(d.label, 12, y + 23);
 
         // Count
-        ctx.fillStyle = '#9898b0';
-        ctx.font = '600 14px Inter, sans-serif';
+        ctx.fillStyle = '#86868b';
+        ctx.font = '600 14px "Plus Jakarta Sans", -apple-system, sans-serif';
         ctx.fillText(d.value, canvas.width - 70, y + 23);
     });
 }
