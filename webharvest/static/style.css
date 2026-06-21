@@ -1412,6 +1412,7 @@ select:focus {
   padding: 40px 36px;
   width: 420px;
   max-width: 90vw;
+  position: relative;
   animation: slideUp 0.35s var(--apple-ease-spring);
 }
 
@@ -1476,6 +1477,99 @@ select:focus {
   font-size: 12px;
   text-align: center;
   margin: 0;
+}
+
+.close-license {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--apple-radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--apple-tab-bg);
+  border: 1px solid var(--apple-hairline);
+  color: var(--apple-ink-muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s var(--apple-ease-out);
+  z-index: 1;
+}
+
+.close-license:hover {
+  color: var(--apple-ink);
+  background: var(--apple-tab-btn-active);
+  border-color: var(--apple-hairline-light);
+}
+
+.license-actions {
+  display: flex;
+  gap: 12px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.btn-activate, .btn-deactivate {
+  flex: 1;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--apple-radius-sm);
+  font-size: 13.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s var(--apple-ease-out);
+}
+
+.btn-activate {
+  background: var(--apple-blue-cta);
+  color: #ffffff;
+}
+
+.btn-activate:hover {
+  background: var(--apple-blue-cta-hover);
+}
+
+.btn-deactivate {
+  background: transparent;
+  border: 1px solid var(--apple-danger);
+  color: var(--apple-danger);
+}
+
+.btn-deactivate:hover {
+  background: rgba(255, 69, 58, 0.08);
+}
+
+.device-id-display {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--apple-hairline);
+  font-size: 11px;
+  color: var(--apple-ink-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.device-name-row span {
+  font-weight: 500;
+  color: var(--apple-ink);
+}
+
+.device-id-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.device-id-row span {
+  word-break: break-all;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  color: var(--apple-ink-white-muted);
 }
 
 .license-separator {

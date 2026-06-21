@@ -345,16 +345,10 @@ function initThemeToggle() {
     if (!toggleBtn) return;
 
     function updateToggleIcon(theme) {
-        const icon = toggleBtn.querySelector('i');
-        if (icon) {
-            if (theme === 'light') {
-                icon.setAttribute('data-lucide', 'moon');
-            } else {
-                icon.setAttribute('data-lucide', 'sun');
-            }
-            if (window.lucide) {
-                window.lucide.createIcons();
-            }
+        const iconName = theme === 'light' ? 'moon' : 'sun';
+        toggleBtn.innerHTML = `<i data-lucide="${iconName}"></i>`;
+        if (window.lucide) {
+            window.lucide.createIcons();
         }
     }
 
