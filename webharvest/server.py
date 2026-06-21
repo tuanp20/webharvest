@@ -399,6 +399,9 @@ _proxy_circuit = {
     "cooldown_seconds": 300,  # 5 minutes
 }
 
+_proxy_acquire_lock = asyncio.Lock()
+_last_acquire_time = 0.0
+
 
 def _circuit_is_open() -> bool:
     """Check if circuit breaker is open (proxy disabled temporarily)."""
@@ -447,28 +450,69 @@ async def _acquire_proxy_internal(target_url: str = "", country: str = "") -> di
 
     device_id = _generate_device_id()
 
-    try:
-        async with _httpx.AsyncClient(timeout=10) as client:
-            resp = await client.post(
-                f"{LICENSE_SERVER_URL}/api/proxy/acquire",
-                json={
-                    "key": key,
-                    "device_id": device_id,
-                    "target_url": target_url,
-                    "country": country,
-                },
-            )
-            result = resp.json()
-            if result.get("success") and result.get("proxy_url"):
-                _circuit_record_success()
-                return {
-                    "proxy_url": result["proxy_url"],
-                    "session_id": result.get("session_id", ""),
-                    "quota_remaining_gb": result.get("quota_remaining_gb"),
-                }
-    except Exception as e:
-        logger.warning("Failed to acquire proxy: %s", e)
-        _circuit_record_failure()
+    global _last_acquire_time
+
+    async with _proxy_acquire_lock:
+        for attempt in range(3):
+            # Throttle: ensure at least 0.5s between calls
+            now = time.time()
+            elapsed = now - _last_acquire_time
+            if elapsed < 0.5:
+                await asyncio.sleep(0.5 - elapsed)
+            _last_acquire_time = time.time()
+
+            try:
+                async with _httpx.AsyncClient(timeout=10) as client:
+                    resp = await client.post(
+                        f"{LICENSE_SERVER_URL}/api/proxy/acquire",
+                        json={
+                            "key": key,
+                            "device_id": device_id,
+                            "target_url": target_url,
+                            "country": country,
+                        },
+                    )
+
+                    if resp.status_code == 429:
+                        if attempt < 2:
+                            backoff = 2 ** (attempt + 1)
+                            logger.warning(
+                                "License server proxy acquisition rate limited (429). Retrying in %ds (attempt %d/3)...",
+                                backoff, attempt + 1
+                            )
+                            await asyncio.sleep(backoff)
+                            continue
+                        else:
+                            logger.error("License server rate limited proxy acquisition. All attempts failed.")
+                            _circuit_record_failure()
+                            return {}
+
+                    result = resp.json()
+                    if result.get("success"):
+                        if result.get("proxy_url"):
+                            _circuit_record_success()
+                            return {
+                                "proxy_url": result["proxy_url"],
+                                "session_id": result.get("session_id", ""),
+                                "quota_remaining_gb": result.get("quota_remaining_gb"),
+                            }
+                        else:
+                            # Hard quota exhaustion or tier limits reached
+                            logger.info("Proxy acquisition hard limit/failure: %s", result.get("reason", "unknown"))
+                            # Return success as False or fallback local, do not trigger circuit failure
+                            return {"fallback_local": True, "reason": result.get("reason")}
+                    else:
+                        logger.warning("License server rejected proxy acquisition: %s", result.get("error"))
+                        return {"fallback_local": True, "reason": result.get("error")}
+
+            except Exception as e:
+                logger.warning("Failed to acquire proxy (attempt %d/3): %s", attempt + 1, e)
+                if attempt < 2:
+                    backoff = 2 ** (attempt + 1)
+                    await asyncio.sleep(backoff)
+                    continue
+                else:
+                    _circuit_record_failure()
 
     return {}
 

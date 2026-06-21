@@ -201,12 +201,20 @@ class StaticFetcher(BaseFetcher):
         for attempt in range(config.retry_count):
             try:
                 resp = await client.get(url)
+                if resp.status_code == 429:
+                    if attempt < config.retry_count - 1:
+                        backoff = 2 ** (attempt + 1)
+                        logger.warning("StaticFetcher: rate limited (429) for %s. Retrying in %ds (attempt %d/%d)...",
+                                       url, backoff, attempt + 1, config.retry_count)
+                        await asyncio.sleep(backoff)
+                        continue
                 return resp.text, resp.status_code
             except (httpx.HTTPError, httpx.TimeoutException) as exc:
                 if attempt == config.retry_count - 1:
                     logger.warning("StaticFetcher failed for %s: %s", url, exc)
                     return "", 0
-                await asyncio.sleep(1 * (attempt + 1))
+                backoff = 1 * (attempt + 1)
+                await asyncio.sleep(backoff)
         return "", 0
 
     async def close(self):
@@ -319,22 +327,35 @@ class StealthFetcher(BaseFetcher):
         # Run synchronous curl_cffi in a thread to avoid blocking the event loop
         def _sync_fetch():
             import traceback
-            try:
-                logger.warning("[curl_cffi] Attempting %s with target=%s", url, target)
-                resp = curl_requests.get(
-                    url,
-                    headers=headers,
-                    impersonate=target,
-                    timeout=config.timeout,
-                    allow_redirects=True,
-                    verify=config.verify_ssl,
-                    proxies={"https": config.proxy, "http": config.proxy} if config.proxy else None,
-                )
-                logger.warning("[curl_cffi] %s → status=%d, len=%d", target, resp.status_code, len(resp.text))
-                return resp.text, resp.status_code
-            except Exception as exc:
-                logger.warning("[curl_cffi] %s EXCEPTION for %s: %s\n%s", target, url, exc, traceback.format_exc())
-                return "", 0
+            import time
+            for attempt in range(config.retry_count):
+                try:
+                    logger.warning("[curl_cffi] Attempting %s with target=%s (attempt %d/%d)", url, target, attempt + 1, config.retry_count)
+                    resp = curl_requests.get(
+                        url,
+                        headers=headers,
+                        impersonate=target,
+                        timeout=config.timeout,
+                        allow_redirects=True,
+                        verify=config.verify_ssl,
+                        proxies={"https": config.proxy, "http": config.proxy} if config.proxy else None,
+                    )
+                    logger.warning("[curl_cffi] %s → status=%d, len=%d", target, resp.status_code, len(resp.text))
+                    if resp.status_code == 429:
+                        if attempt < config.retry_count - 1:
+                            backoff = 2 ** (attempt + 1)
+                            logger.warning("[curl_cffi] Rate limited (429) for %s. Retrying in %ds...", url, backoff)
+                            time.sleep(backoff)
+                            continue
+                    return resp.text, resp.status_code
+                except Exception as exc:
+                    logger.warning("[curl_cffi] %s EXCEPTION for %s: %s\n%s", target, url, exc, traceback.format_exc())
+                    if attempt < config.retry_count - 1:
+                        backoff = 2 ** (attempt + 1)
+                        time.sleep(backoff)
+                        continue
+                    return "", 0
+            return "", 0
 
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(None, _sync_fetch)

@@ -137,13 +137,6 @@ class DataImpulseProxyService:
         else:
             remaining = int(tier_cfg.proxy_quota_gb * 1_073_741_824)
 
-        # Check concurrent sessions limit
-        active_count = sum(1 for s in _active_sessions.values() if s["license_key"] == license_key)
-        if active_count >= tier_cfg.max_concurrent_proxy:
-            logger.info("Max concurrent proxy sessions reached for key=%s (%d/%d)",
-                        license_key[:10], active_count, tier_cfg.max_concurrent_proxy)
-            return None
-
         # Extract domain from URL for logging
         target_domain = ""
         if target_url:
@@ -153,6 +146,43 @@ class DataImpulseProxyService:
             except Exception:
                 target_domain = target_url[:50]
 
+        now = datetime.now(timezone.utc)
+
+        # Look for existing active session to reuse (cache hit)
+        cached_session_id = None
+        for s_id, s in list(_active_sessions.items()):
+            # Clean up expired session if TTL has elapsed
+            elapsed = (now - s["acquired_at"]).total_seconds()
+            if elapsed >= tier_cfg.proxy_session_ttl:
+                _active_sessions.pop(s_id, None)
+                continue
+            
+            if s["license_key"] == license_key and s["target_domain"] == target_domain and s.get("country", "") == country:
+                cached_session_id = s_id
+                break
+
+        if cached_session_id:
+            s = _active_sessions[cached_session_id]
+            logger.info("Server-side proxy acquisition cache HIT: reusing session=%s key=%s domain=%s country=%s",
+                        cached_session_id[:8], license_key[:10], target_domain, country)
+            return ProxySession(
+                session_id=cached_session_id,
+                proxy_url=s["proxy_url"],
+                license_key=license_key,
+                tier=tier,
+                target_domain=target_domain,
+                acquired_at=s["acquired_at"],
+                ttl_seconds=tier_cfg.proxy_session_ttl,
+                quota_remaining_bytes=int(remaining),
+            )
+
+        # Check concurrent sessions limit (only for cache miss)
+        active_count = sum(1 for s in _active_sessions.values() if s["license_key"] == license_key)
+        if active_count >= tier_cfg.max_concurrent_proxy:
+            logger.info("Max concurrent proxy sessions reached for key=%s (%d/%d)",
+                        license_key[:10], active_count, tier_cfg.max_concurrent_proxy)
+            return None
+
         # Generate session
         session_id = str(uuid.uuid4())
         
@@ -160,7 +190,6 @@ class DataImpulseProxyService:
         sticky = session_id[:8] if tier in ("pro", "unlimited") else ""
         proxy_url = self.build_proxy_url(country=country, sticky_session=sticky)
 
-        now = datetime.now(timezone.utc)
         session = ProxySession(
             session_id=session_id,
             proxy_url=proxy_url,
@@ -180,6 +209,7 @@ class DataImpulseProxyService:
             "target_domain": target_domain,
             "acquired_at": now,
             "proxy_url": proxy_url,
+            "country": country,
         }
 
         # Store in DB
