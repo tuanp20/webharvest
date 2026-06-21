@@ -105,7 +105,7 @@ try:
 except ImportError:
     pass
 
-LICENSE_SERVER_URL = os.getenv("LICENSE_SERVER_URL", "http://127.0.0.1:8443")
+LICENSE_SERVER_URL = os.getenv("LICENSE_SERVER_URL", "https://api.webharvest.twentypi.com")
 _license_cache: Dict[str, Any] = {}  # {key: {data, cached_at}}
 _LICENSE_CACHE_TTL = 300  # 5 minutes
 _LICENSE_GRACE_PERIOD = 86_400  # 24 hours offline grace
