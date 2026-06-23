@@ -37,7 +37,7 @@ case "$MODE" in
         echo -e "${GREEN}${BOLD}🌐 Starting WebHarvest Web UI...${NC}"
         echo -e "  Opening http://localhost:8000 in browser"
         echo ""
-        python -m webharvest.server
+        python -m webharvest server
         ;;
     desktop|app)
         echo -e "${GREEN}${BOLD}🖥️  Starting WebHarvest Desktop App...${NC}"

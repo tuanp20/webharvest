@@ -43,6 +43,12 @@ def _ensure_deps() -> None:
 
 def _get_icon_path() -> str | None:
     """Return the path to the app icon, or None if not present."""
+    # Check logo_assets first (preferred location)
+    for ext in (".icns", ".ico", ".png"):
+        p = ROOT / "logo_assets" / f"icon{ext}"
+        if p.exists():
+            return str(p)
+    # Fallback to static directory
     for ext in (".ico", ".icns", ".png"):
         p = ROOT / "webharvest" / "static" / f"icon{ext}"
         if p.exists():
