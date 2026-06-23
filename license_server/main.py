@@ -842,8 +842,10 @@ async def return_page():
 async def download_windows():
     setup_path = _static_dir / "downloads" / "WebHarvest_Setup.exe"
     if not setup_path.exists():
-        setup_path.parent.mkdir(parents=True, exist_ok=True)
-        setup_path.write_text("Mock WebHarvest Windows Executable Setup Placeholder", encoding="utf-8")
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "Windows installer not available. Please contact support."}
+        )
     return FileResponse(
         str(setup_path),
         media_type="application/octet-stream",
@@ -855,8 +857,10 @@ async def download_windows():
 async def download_macos():
     setup_path = _static_dir / "downloads" / "WebHarvest_Setup.dmg"
     if not setup_path.exists():
-        setup_path.parent.mkdir(parents=True, exist_ok=True)
-        setup_path.write_text("Mock WebHarvest macOS Disk Image Setup Placeholder", encoding="utf-8")
+        return JSONResponse(
+            status_code=404,
+            content={"detail": "macOS installer not available. Please contact support."}
+        )
     return FileResponse(
         str(setup_path),
         media_type="application/octet-stream",

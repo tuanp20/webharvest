@@ -40,6 +40,7 @@ Thumbs.db
 # Output / downloaded images
 output/
 downloads/
+!license_server/static/downloads/
 etsy_*/
 etsy_test_*/
 wikipedia_images/
