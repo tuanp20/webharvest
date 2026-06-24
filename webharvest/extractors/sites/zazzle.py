@@ -44,7 +44,6 @@ class ZazzleExtractor(BaseSiteExtractor):
                     price=price,
                     description=p.get("description"),
                     category=p.get("categoryName") or p.get("category"),
-                    raw_json=p
                 )
 
         # 2. Fallback to selectors
@@ -60,10 +59,10 @@ class ZazzleExtractor(BaseSiteExtractor):
             except ValueError:
                 pass
 
-        image_url = None
-        img_tag = soup.find("meta", property="og:image") or soup.find("img")
-        if img_tag:
-            image_url = img_tag.get("content") or img_tag.get("src")
+        image_url = self._extract_main_image(soup, url)
+        description = self._extract_description(soup)
+        variants, colors, sizes = self._extract_variations(soup)
+        category = self._extract_category(soup) or "Custom Gifts"
 
         return ProductData(
             title=title,
@@ -71,8 +70,11 @@ class ZazzleExtractor(BaseSiteExtractor):
             source_site=self.SITE_DOMAIN,
             main_image_url=image_url,
             price=price_val,
-            description=None,
-            category="Custom Gifts"
+            description=description,
+            category=category,
+            variants=variants,
+            colors=colors,
+            sizes=sizes,
         )
 
     def extract_listing(self, html: str, url: str) -> list[str]:

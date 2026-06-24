@@ -43,20 +43,31 @@ class WooCommerceExtractor(BaseSiteExtractor):
             except ValueError:
                 pass
 
-        # Image
+        # WooCommerce-specific gallery image, fallback to base helper
         image_url = None
-        img_tag = soup.find("div", class_="woocommerce-product-gallery__image") or soup.find("img", class_="wp-post-image")
-        if img_tag:
-            if isinstance(img_tag, BeautifulSoup):
-                nested_img = img_tag.find("img")
-                if nested_img:
-                    image_url = nested_img.get("src")
-            else:
-                image_url = img_tag.get("src")
+        gallery_div = soup.find("div", class_="woocommerce-product-gallery__image")
+        if gallery_div:
+            nested_img = gallery_div.find("img")
+            if nested_img:
+                image_url = nested_img.get("src")
+        if not image_url:
+            wp_img = soup.find("img", class_="wp-post-image")
+            if wp_img:
+                image_url = wp_img.get("src")
+        if not image_url:
+            image_url = self._extract_main_image(soup, url)
 
-        # Description
+        # Description — WooCommerce specific containers first
         desc_tag = soup.find("div", class_="woocommerce-product-details__short-description") or soup.find("div", id="tab-description")
         description = desc_tag.get_text(strip=True) if desc_tag else None
+        if not description:
+            description = self._extract_description(soup)
+
+        # Variations
+        variants, colors, sizes = self._extract_variations(soup)
+
+        # Category
+        category = self._extract_category(soup) or "Shop Product"
 
         return ProductData(
             title=title,
@@ -65,7 +76,10 @@ class WooCommerceExtractor(BaseSiteExtractor):
             main_image_url=image_url,
             price=price_val,
             description=description,
-            category="Shop Product"
+            category=category,
+            variants=variants,
+            colors=colors,
+            sizes=sizes,
         )
 
     def extract_listing(self, html: str, url: str) -> list[str]:

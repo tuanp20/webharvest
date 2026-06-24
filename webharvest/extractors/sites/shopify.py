@@ -51,9 +51,42 @@ class ShopifyExtractor(BaseSiteExtractor):
         from bs4 import BeautifulSoup
         from webharvest.extractors.json_parsers.json_ld import JsonLdProductParser
         
-        json_ld_list = ContentExtractor._extract_json_ld(BeautifulSoup(html, "lxml"))
+        soup = BeautifulSoup(html, "lxml")
+        json_ld_list = ContentExtractor._extract_json_ld(soup)
         product = JsonLdProductParser.parse(json_ld_list, url, "shopify")
-        return product
+        if product:
+            return product
+
+        # Final fallback: use base helpers
+        import re
+        title_tag = soup.find("h1") or soup.find("title")
+        title = title_tag.get_text(strip=True) if title_tag else ""
+
+        price_val = None
+        price_tag = soup.find(class_=re.compile(r"price|amount", re.I))
+        if price_tag:
+            try:
+                price_val = float(re.sub(r"[^\d.]", "", price_tag.get_text()))
+            except ValueError:
+                pass
+
+        image_url = self._extract_main_image(soup, url)
+        description = self._extract_description(soup)
+        variants, colors, sizes = self._extract_variations(soup)
+        category = self._extract_category(soup) or "Shopify Product"
+
+        return ProductData(
+            title=title,
+            url=url,
+            source_site="shopify",
+            main_image_url=image_url,
+            price=price_val,
+            description=description,
+            category=category,
+            variants=variants,
+            colors=colors,
+            sizes=sizes,
+        )
 
     def extract_listing(self, html: str, url: str) -> list[str]:
         # If the listing page is catalog, we can directly query /products.json

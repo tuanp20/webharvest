@@ -43,11 +43,12 @@ class GenericSiteExtractor(BaseSiteExtractor):
         if product:
             return product
 
-        # 2. Try standard meta/HTML selectors
+        # 2. Use base helpers for structured extraction
+        import re
         title_tag = soup.find("h1") or soup.find("title")
         title = title_tag.get_text(strip=True) if title_tag else ""
         
-        # Strip standard suffix
+        # Strip common title suffixes
         if " - " in title:
             title = title.split(" - ")[0]
 
@@ -55,20 +56,14 @@ class GenericSiteExtractor(BaseSiteExtractor):
         price_tag = soup.find(itemprop="price") or soup.find(class_=lambda x: x and "price" in x.lower())
         if price_tag:
             try:
-                import re
                 price_val = float(re.sub(r"[^\d.]", "", price_tag.get_text()))
             except Exception:
                 pass
 
-        image_url = None
-        img_tag = soup.find("meta", property="og:image") or soup.find("img")
-        if img_tag:
-            image_url = img_tag.get("content") or img_tag.get("src")
-            if image_url:
-                image_url = urljoin(url, image_url)
-
-        description_tag = soup.find("meta", attrs={"name": "description"}) or soup.find(itemprop="description")
-        description = description_tag.get("content") if description_tag else None
+        image_url = self._extract_main_image(soup, url)
+        description = self._extract_description(soup)
+        variants, colors, sizes = self._extract_variations(soup)
+        category = self._extract_category(soup) or "Product"
 
         return ProductData(
             title=title,
@@ -77,7 +72,10 @@ class GenericSiteExtractor(BaseSiteExtractor):
             main_image_url=image_url,
             price=price_val,
             description=description,
-            category="Product"
+            category=category,
+            variants=variants,
+            colors=colors,
+            sizes=sizes,
         )
 
     def extract_listing(self, html: str, url: str) -> list[str]:
@@ -246,32 +244,31 @@ class ProductCrawlPipeline:
             output_file = self.output_dir / "products.json"
             products_json = []
             for p in self._results:
-                # Convert dataclass to dict
+                # Output only the 6 required fields + url for reference
                 p_dict = {
                     "title": p.title,
-                    "url": p.url,
-                    "source_site": p.source_site,
-                    "main_image_url": p.main_image_url,
+                    "main_image": p.main_image_url,
                     "local_image_path": getattr(p, "local_image_path", None),
                     "price": p.price,
                     "currency": p.currency,
+                    "variations": [
+                        {
+                            k: v for k, v in {
+                                "color": var.color,
+                                "size": var.size,
+                                "price": var.price,
+                                "sku": var.sku,
+                                "in_stock": var.in_stock,
+                                "image_url": var.image_url,
+                                "local_image_path": getattr(var, "local_image_path", None),
+                            }.items() if v is not None
+                        }
+                        for var in p.variants
+                    ],
                     "description": p.description,
                     "category": p.category,
-                    "colors": p.colors,
-                    "sizes": p.sizes,
                     "local_additional_images": getattr(p, "local_additional_images", []),
-                    "variants": [
-                        {
-                            "color": v.color,
-                            "size": v.size,
-                            "price": v.price,
-                            "sku": v.sku,
-                            "in_stock": v.in_stock,
-                            "image_url": v.image_url,
-                            "local_image_path": getattr(v, "local_image_path", None),
-                        }
-                        for v in p.variants
-                    ],
+                    "url": p.url,
                 }
                 products_json.append(p_dict)
 

@@ -51,6 +51,7 @@ class JsonLdProductParser:
                 title = str(product_obj["name"])
 
             # Image
+            from urllib.parse import urljoin
             image = product_obj.get("image")
             def _resolve_img(img):
                 if not img:
@@ -63,6 +64,8 @@ class JsonLdProductParser:
                     return _resolve_img(img[0])
                 return None
             main_image = _resolve_img(image)
+            if main_image:
+                main_image = urljoin(url, main_image.strip())
 
             # Description
             description = product_obj.get("description")
@@ -104,9 +107,66 @@ class JsonLdProductParser:
                 if avail and "OutOfStock" in str(avail):
                     in_stock = False
 
-                # Variations if nested in offer
+                # Variations: try explicit fields first
                 color = offer.get("color")
                 size = offer.get("size")
+
+                # Parse from offer name (common format: "Color / Size" or "Color - Size")
+                if not color and not size:
+                    offer_name = offer.get("name") or ""
+                    if offer_name:
+                        # Common separators: " / ", " - ", " | "
+                        for sep in [" / ", " - ", " | "]:
+                            if sep in offer_name:
+                                parts = [p.strip() for p in offer_name.split(sep)]
+                                if len(parts) >= 2:
+                                    # Heuristic: if second part looks like a size
+                                    _size_keywords = {"xs", "s", "m", "l", "xl", "xxl", "xxxl",
+                                                      "2xl", "3xl", "4xl", "5xl", "one size"}
+                                    if parts[-1].lower().strip() in _size_keywords:
+                                        color = parts[0]
+                                        size = parts[-1]
+                                    elif parts[0].lower().strip() in _size_keywords:
+                                        size = parts[0]
+                                        color = parts[-1]
+                                    else:
+                                        # Assume first=color, last=size if both exist
+                                        color = parts[0]
+                                        size = parts[-1] if len(parts) > 1 else None
+                                break
+
+                    # Also try extracting from SKU (format: "PRODUCT-COLOR-SIZE")
+                    if not color and not size and sku:
+                        sku_parts = sku.split("-")
+                        if len(sku_parts) >= 3:
+                            # Last part is often size, second-to-last is color
+                            potential_size = sku_parts[-1].strip()
+                            _size_keywords = {"xs", "s", "m", "l", "xl", "xxl", "xxxl",
+                                              "2xl", "3xl", "4xl", "5xl"}
+                            if potential_size.lower() in _size_keywords:
+                                size = potential_size
+                                color = sku_parts[-2].strip()
+
+                # Clean up color/size if they contain the title or duplicate separators
+                if color:
+                    color = color.strip()
+                    if title:
+                        title_clean = title.strip()
+                        if color.lower().startswith(title_clean.lower()):
+                            color = color[len(title_clean):].strip()
+                    color = color.strip(" -/|").strip()
+                    if not color or color in ["-", "--", "---"]:
+                        color = None
+
+                if size:
+                    size = size.strip()
+                    if title:
+                        title_clean = title.strip()
+                        if size.lower().startswith(title_clean.lower()):
+                            size = size[len(title_clean):].strip()
+                    size = size.strip(" -/|").strip()
+                    if not size or size in ["-", "--", "---"]:
+                        size = None
 
                 return ProductVariant(
                     color=color,

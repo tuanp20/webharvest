@@ -45,21 +45,22 @@ class TeePublicExtractor(BaseSiteExtractor):
             except ValueError:
                 pass
 
-        # Image
-        img_tag = soup.find("img", class_=re.compile(r"product-image|preview", re.I)) or soup.find("meta", property="og:image")
+        # TeePublic-specific image, fallback to base helper
+        img_tag = soup.find("img", class_=re.compile(r"product-image|preview", re.I))
         image_url = None
         if img_tag:
-            image_url = img_tag.get("content") or img_tag.get("src")
+            image_url = img_tag.get("src")
+        if not image_url:
+            image_url = self._extract_main_image(soup, url)
 
         # Description
-        desc_tag = soup.find(class_=re.compile(r"description", re.I))
-        description = desc_tag.get_text(strip=True) if desc_tag else None
+        description = self._extract_description(soup)
 
-        # Category
-        category = "T-Shirt"
-        breadcrumbs = soup.find(class_=re.compile(r"breadcrumb", re.I))
-        if breadcrumbs:
-            category = breadcrumbs.get_text(" > ", strip=True)
+        # Category from breadcrumb
+        category = self._extract_category(soup) or "T-Shirt"
+
+        # Variations
+        variants, colors, sizes = self._extract_variations(soup)
 
         return ProductData(
             title=title,
@@ -68,7 +69,10 @@ class TeePublicExtractor(BaseSiteExtractor):
             main_image_url=image_url,
             price=price_val,
             description=description,
-            category=category
+            category=category,
+            variants=variants,
+            colors=colors,
+            sizes=sizes,
         )
 
     def extract_listing(self, html: str, url: str) -> list[str]:

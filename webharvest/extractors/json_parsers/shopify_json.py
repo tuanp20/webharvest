@@ -40,7 +40,15 @@ class ShopifyJsonParser:
                 additional_images = []
                 if isinstance(images, list) and images:
                     main_image = images[0].get("src")
-                    additional_images = [img.get("src") for img in images[1:] if img.get("src")]
+                    if main_image and main_image.startswith("//"):
+                        main_image = f"https:{main_image}"
+                    additional_images = [
+                        img.get("src") for img in images[1:] if img.get("src")
+                    ]
+                    additional_images = [
+                        f"https:{img}" if img.startswith("//") else img
+                        for img in additional_images
+                    ]
 
                 # Vendor/Brand
                 brand = p.get("vendor")
@@ -116,13 +124,17 @@ class ShopifyJsonParser:
                         # Check availability
                         in_stock = v.get("available", True)
 
+                        var_img = v.get("featured_image", {}).get("src") if isinstance(v.get("featured_image"), dict) else None
+                        if var_img and var_img.startswith("//"):
+                            var_img = f"https:{var_img}"
+
                         variants.append(ProductVariant(
                             color=color_val,
                             size=size_val,
                             price=price_val,
                             sku=v.get("sku"),
                             in_stock=in_stock,
-                            image_url=v.get("featured_image", {}).get("src") if isinstance(v.get("featured_image"), dict) else None
+                            image_url=var_img
                         ))
 
                 # Primary price
