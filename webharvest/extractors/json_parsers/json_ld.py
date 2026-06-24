@@ -52,13 +52,17 @@ class JsonLdProductParser:
 
             # Image
             image = product_obj.get("image")
-            main_image = None
-            if isinstance(image, list) and image:
-                main_image = image[0]
-            elif isinstance(image, dict):
-                main_image = image.get("url")
-            elif isinstance(image, str):
-                main_image = image
+            def _resolve_img(img):
+                if not img:
+                    return None
+                if isinstance(img, str):
+                    return img
+                if isinstance(img, dict):
+                    return img.get("contentUrl") or img.get("contentURL") or img.get("url")
+                if isinstance(img, list) and img:
+                    return _resolve_img(img[0])
+                return None
+            main_image = _resolve_img(image)
 
             # Description
             description = product_obj.get("description")

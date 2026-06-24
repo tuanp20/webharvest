@@ -14,6 +14,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 from urllib.parse import urlparse
+from urllib.parse import urlparse as _urlparse
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPException, UploadFile, File
 from fastapi.responses import HTMLResponse, FileResponse
@@ -26,6 +27,30 @@ from webharvest.batch_parser import parse_file, parse_google_sheet, ParseResult
 
 import httpx as _httpx
 import json as _json
+import tempfile as _tempfile
+
+# ── Path Traversal Protection ─────────────────────────────────────────────
+_ALLOWED_OUTPUT_DIRS: set = set()
+
+
+def _validate_file_path(requested_path: str) -> Path:
+    """Validate that requested path is within an allowed output directory."""
+    resolved = Path(requested_path).resolve()
+    for base_dir in _ALLOWED_OUTPUT_DIRS:
+        base = Path(base_dir).resolve()
+        if resolved.is_relative_to(base):
+            return resolved
+    raise HTTPException(status_code=403, detail="Access denied: path outside allowed directories")
+
+
+def _register_output_dir(output_dir: str):
+    """Register an output directory as allowed for file access."""
+    if output_dir:
+        _ALLOWED_OUTPUT_DIRS.add(str(Path(output_dir).resolve()))
+
+
+# ── Concurrent Crawl Limiter ──────────────────────────────────────────────
+_crawl_semaphore = asyncio.Semaphore(3)  # Max 3 concurrent crawls
 
 # Configure logging
 logger = logging.getLogger("webharvest.server")
@@ -60,6 +85,26 @@ def _get_settings_path() -> Path:
     return Path(__file__).parent.parent / "webharvest_settings.json"
 
 
+def _atomic_write_json(filepath: Path, data: dict):
+    """Atomically write JSON data to file using temp file + rename."""
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = _tempfile.mkstemp(
+        dir=str(filepath.parent),
+        suffix='.tmp',
+        prefix=filepath.stem
+    )
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            _json.dump(data, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, str(filepath))  # Atomic on POSIX
+    except:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
 def _save_license_key_to_settings(key: str):
     """Write license key to settings so server internal tasks can load it."""
     try:
@@ -71,7 +116,7 @@ def _save_license_key_to_settings(key: str):
             except Exception:
                 pass
         sdata["license_key"] = key
-        path.write_text(_json.dumps(sdata, indent=2, ensure_ascii=False), encoding="utf-8")
+        _atomic_write_json(path, sdata)
         logger.info("Saved license key to settings")
     except Exception as e:
         logger.warning("Failed to save license key to settings: %s", e)
@@ -86,7 +131,7 @@ def _remove_license_key_from_settings():
                 sdata = _json.loads(path.read_text(encoding="utf-8"))
                 if "license_key" in sdata:
                     del sdata["license_key"]
-                    path.write_text(_json.dumps(sdata, indent=2, ensure_ascii=False), encoding="utf-8")
+                    _atomic_write_json(path, sdata)
                     logger.info("Removed license key from settings")
             except Exception:
                 pass
@@ -106,6 +151,8 @@ except ImportError:
     pass
 
 LICENSE_SERVER_URL = os.getenv("LICENSE_SERVER_URL", "https://api.webharvest.twentypi.com")
+if not LICENSE_SERVER_URL.strip():
+    LICENSE_SERVER_URL = "https://api.webharvest.twentypi.com"
 _license_cache: Dict[str, Any] = {}  # {key: {data, cached_at}}
 _LICENSE_CACHE_TTL = 300  # 5 minutes
 _LICENSE_GRACE_PERIOD = 86_400  # 24 hours offline grace
@@ -154,9 +201,10 @@ async def validate_license(key: str, device_id: str, action: str = "validate") -
 
     # Check in-memory cache
     cache_key = f"{key}:{device_id}"
-    cached = _license_cache.get(cache_key)
-    if cached and (time.time() - cached["cached_at"]) < _LICENSE_CACHE_TTL:
-        return cached["data"]
+    if action == "validate":
+        cached = _license_cache.get(cache_key)
+        if cached and (time.time() - cached["cached_at"]) < _LICENSE_CACHE_TTL:
+            return cached["data"]
 
     # Call license server
     try:
@@ -222,10 +270,66 @@ def _check_offline_grace(key: str, device_id: str) -> dict:
     })
 
 
+async def _check_crawl_license(action: str = "crawl") -> None:
+    """Validate current license against license server for a crawl action.
+    Raises HTTPException on validation failure.
+    """
+    if not LICENSE_SERVER_URL:
+        return
+        
+    path = _get_settings_path()
+    key = ""
+    if path.exists():
+        try:
+            sdata = _json.loads(path.read_text(encoding="utf-8"))
+            key = sdata.get("license_key", "")
+        except Exception:
+            pass
+
+    if not key:
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "Vui lòng nhập license key hoặc kích hoạt dùng thử để sử dụng tính năng này.", "error_code": "KEY_REQUIRED"}
+        )
+
+    device_id = _generate_device_id()
+    await validate_license(key, device_id, action=action)
+
+
 # Health check for desktop app readiness probe
 @app.get("/api/health")
 async def health_check():
     return {"status": "ok", "version": "1.0.0"}
+
+
+@app.get("/api/version")
+async def get_version():
+    """Return current app version and check for updates."""
+    from webharvest import __version__
+    result = {'current_version': __version__}
+
+    try:
+        async with _httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(
+                'https://api.webharvest.twentypi.com/api/version/latest',
+                headers={'User-Agent': f'WebHarvest/{__version__}'},
+            )
+            if resp.status_code == 200:
+                data = resp.json()
+                latest = data.get('version', '')
+                if latest and latest != __version__:
+                    result['update_available'] = True
+                    result['latest_version'] = latest
+                    result['download_url'] = data.get(
+                        'download_url', 'https://webharvest.twentypi.com/#download'
+                    )
+                else:
+                    result['update_available'] = False
+    except Exception:
+        result['update_available'] = False
+
+    return result
+
 
 
 # ── Device ID & License Endpoints (for frontend) ─────────────────────────
@@ -272,6 +376,103 @@ async def activate_license_local(body: LicenseActivateBody):
                     "error_code": data.get("error_code", "UNKNOWN")}
     except _httpx.RequestError as e:
         return {"success": False, "error": f"Cannot reach license server: {e}", "error_code": "UNREACHABLE"}
+
+
+class TrialRequestLocalBody(BaseModel):
+    email: str = None
+
+
+@app.post("/api/license/request-trial-local")
+async def request_trial_local(body: TrialRequestLocalBody):
+    """Request a trial license key from the desktop app."""
+    if not LICENSE_SERVER_URL:
+        # Dev mode mock
+        trial_key = "WH-TRIAL-DEV-MODE"
+        _save_license_key_to_settings(trial_key)
+        return {
+            "success": True,
+            "key": trial_key,
+            "remaining": 20,
+            "expires_in_days": 14,
+            "all_features_unlocked": True
+        }
+
+    device_id = _generate_device_id()
+    device_name = _get_device_name()
+
+    try:
+        async with _httpx.AsyncClient(timeout=15) as client:
+            resp = await client.post(
+                f"{LICENSE_SERVER_URL}/api/license/request-trial",
+                json={"device_id": device_id, "device_name": device_name, "email": body.email},
+            )
+            data = resp.json()
+            if resp.status_code == 200 and data.get("success"):
+                key = data.get("key")
+                vdata = {
+                    "valid": True,
+                    "tier": "trial",
+                    "limits": {
+                        "max_daily_urls": 20,
+                        "max_concurrent": 5,
+                        "allowed_fetchers": ["auto", "static", "dynamic", "stealth"],
+                        "batch_crawl": True,
+                        "stealth_mode": True,
+                        "proxy_quota_gb": 0.5,
+                        "is_trial": True,
+                        "trial_remaining": data.get("remaining", 20),
+                        "trial_total": 20
+                    }
+                }
+                _license_cache[f"{key}:{device_id}"] = {"data": vdata, "cached_at": time.time()}
+                _save_license_cache(key, device_id, vdata)
+                _save_license_key_to_settings(key)
+                return data
+            return {"success": False, "error": data.get("error", "Failed to request trial"),
+                    "error_code": data.get("error_code", "UNKNOWN")}
+    except _httpx.RequestError as e:
+        return {"success": False, "error": f"Cannot reach license server: {e}", "error_code": "UNREACHABLE"}
+
+
+@app.get("/api/license/trial-status")
+async def get_trial_status():
+    """Get current trial status from local cache or settings."""
+    path = _get_settings_path()
+    key = ""
+    if path.exists():
+        try:
+            sdata = _json.loads(path.read_text(encoding="utf-8"))
+            key = sdata.get("license_key", "")
+        except Exception:
+            pass
+
+    if not key:
+        return {"is_trial": False, "trial_remaining": 0, "trial_total": 0}
+
+    device_id = _generate_device_id()
+    cache_key = f"{key}:{device_id}"
+    cached = _license_cache.get(cache_key)
+    
+    if not cached and _license_cache_file.exists():
+        try:
+            file_cache = _json.loads(_license_cache_file.read_text(encoding="utf-8"))
+            cached = file_cache.get(cache_key)
+        except Exception:
+            pass
+
+    if cached:
+        data = cached.get("data", {}) if "data" in cached else cached
+        limits = data.get("limits", {})
+        return {
+            "is_trial": limits.get("is_trial", False),
+            "trial_remaining": limits.get("trial_remaining", 0),
+            "trial_total": limits.get("trial_total", 0),
+            "expires_at": data.get("expires_at"),
+            "valid": data.get("valid", False),
+            "tier": data.get("tier")
+        }
+
+    return {"is_trial": False, "trial_remaining": 0, "trial_total": 0}
 
 
 @app.post("/api/license/deactivate-local")
@@ -607,7 +808,7 @@ async def get_index():
 # Serve image dynamically from local path (supports custom output directories)
 @app.get("/api/image")
 async def get_image(path: str = Query(..., description="Absolute path to the downloaded image file")):
-    filepath = Path(path).resolve()
+    filepath = _validate_file_path(path)
     
     # Validation: exists, is a file
     if not filepath.exists() or not filepath.is_file():
@@ -624,6 +825,8 @@ async def get_image(path: str = Query(..., description="Absolute path to the dow
 # List history of downloaded images from output directory
 @app.get("/api/history")
 async def get_history(output_dir: str = Query("./output", description="Directory to scan for downloaded images")):
+    _register_output_dir(output_dir)
+    _validate_file_path(str(Path(output_dir).expanduser().resolve()))
     resolved_dir = Path(output_dir).expanduser().resolve()
     if not resolved_dir.exists() or not resolved_dir.is_dir():
         return {"images": []}
@@ -663,17 +866,51 @@ async def ws_crawl(websocket: WebSocket):
         # 1. Receive crawl config
         data = await websocket.receive_json()
         
+        # Check license validity and quota
+        try:
+            await _check_crawl_license("crawl")
+        except HTTPException as e:
+            detail = e.detail if isinstance(e.detail, dict) else {"error": str(e.detail)}
+            await websocket.send_json({
+                "event": "error",
+                "data": {
+                    "message": detail.get("error", "License validation failed"),
+                    "error_code": detail.get("error_code", "INVALID")
+                }
+            })
+            await websocket.close()
+            return
+
         url = data.get("url", "").strip()
         if not url:
             await websocket.send_json({"event": "error", "data": {"message": "URL is required"}})
             await websocket.close()
             return
-            
+
+        # Validate URL scheme
+        parsed = _urlparse(url)
+        if parsed.scheme not in ('http', 'https'):
+            await websocket.send_json({"event": "error", "data": {"message": "Invalid URL scheme. Only http/https allowed."}})
+            await websocket.close()
+            return
+
         output_dir = data.get("output_dir", "./output").strip()
-        depth = int(data.get("depth", 0))
-        max_pages = int(data.get("max_pages", 100))
+        _register_output_dir(output_dir)
+
+        # Input validation with range capping
+        try:
+            depth = max(0, min(int(data.get("depth", 0)), 10))  # cap at 10
+        except (ValueError, TypeError):
+            depth = 0
+        try:
+            max_pages = max(1, min(int(data.get("max_pages", 100)), 1000))  # cap at 1000
+        except (ValueError, TypeError):
+            max_pages = 100
         fetcher_str = data.get("fetcher", "auto")
-        min_file_size = int(data.get("min_file_size", 0))
+        try:
+            min_file_size = int(data.get("min_file_size", 0))
+        except (ValueError, TypeError):
+            min_file_size = 0
         allowed_formats = set(data.get("allowed_formats", ["jpg", "jpeg", "png", "gif", "webp"]))
         
         # Parse fetcher
@@ -684,140 +921,150 @@ async def ws_crawl(websocket: WebSocket):
 
         # Smart auto-detect: force stealth for sites known to use anti-bot
         _STEALTH_DOMAINS = ["etsy.com", "pinterest.com", "instagram.com", "tiktok.com"]
-        from urllib.parse import urlparse as _urlparse
         _domain = _urlparse(url).netloc.lower()
         if fetcher == FetcherType.AUTO and any(d in _domain for d in _STEALTH_DOMAINS):
             logger.info("Auto-detected anti-bot site (%s), forcing stealth fetcher", _domain)
             fetcher = FetcherType.STEALTH
-            
-        # Server-side proxy acquisition (no proxy URL sent to client)
-        proxy = None
-        _proxy_session_id = ""
-        proxy_result = await _acquire_proxy_internal(target_url=url)
-        if proxy_result.get("proxy_url"):
-            proxy = proxy_result["proxy_url"]
-            _proxy_session_id = proxy_result.get("session_id", "")
-            logger.info("Server-side proxy acquired for crawl (session=%s)", _proxy_session_id[:8])
-        else:
-            logger.info("No proxy available — using local IP")
 
-        # Load backup proxies from proxies.txt
-        backup_proxies: list[str] = []
-        _proxies_file = _get_proxies_file_path()
-        if _proxies_file and _proxies_file.exists():
-            try:
-                for line in _proxies_file.read_text(encoding="utf-8").splitlines():
-                    line = line.strip()
-                    if line and not line.startswith("#") and line not in backup_proxies:
-                        backup_proxies.append(line)
-            except Exception:
-                pass
-
-        config = CrawlConfig(
-            url=url,
-            output_dir=output_dir,
-            depth=depth,
-            max_pages=max_pages,
-            fetcher=fetcher,
-            min_file_size=min_file_size,
-            allowed_formats=allowed_formats,
-            create_dirs=True,
-            overwrite=False,
-            proxy=proxy,
-        )
-        
-        # 2. Set up thread-safe event queue for the websocket stream
-        queue = asyncio.Queue()
-
-        # Map backend event names → frontend event names
-        _EVENT_MAP = {
-            "crawl_start": "crawl_started",
-            "page_fetch": "page_started",
-            "page_parsed": "page_fetched",
-            "antibot_detected": "antibot_detected",
-            "js_detected": "js_detected",
-            "upgrade_failed": "upgrade_failed",
-            "download_start": "download_start",
-            "image_downloaded": "image_downloaded",
-            "download_done": "download_done",
-            "crawl_done": "crawl_done",
-            "gallery_empty": "gallery_empty",
-            "next_page": "next_page",
-            "proxy_fallback": "proxy_fallback",
-            "proxy_success": "proxy_success",
-            "local_ip_success": "local_ip_success",
-            "all_proxies_failed": "all_proxies_failed",
-        }
-        
-        def on_progress(event: str, event_data: Dict[str, Any]):
-            # Place event in queue to be consumed asynchronously
-            asyncio.get_event_loop().call_soon_threadsafe(queue.put_nowait, (event, event_data))
-            
-        # Background task to fetch from the queue and send to WebSocket
-        async def event_sender():
-            pages_visited = 0
-            images_found = 0
-            while True:
-                event, edata = await queue.get()
-                if event is None:
-                    queue.task_done()
-                    break
-
-                # Translate event name for frontend
-                fe_event = _EVENT_MAP.get(event, event)
-
-                # Enrich page_fetched with running stats
-                if event == "page_parsed":
-                    pages_visited += 1
-                    images_found += edata.get("images", 0)
-                    edata["pages_visited"] = pages_visited
-                    edata["images_found"] = images_found
-                    
-                # Format CrawlResult for JSON serialization
-                if event == "crawl_done" and "result" in edata:
-                    r = edata["result"]
-                    edata = {
-                        "result": {
-                            "start_url": r.start_url,
-                            "pages_visited": r.pages_visited,
-                            "images_found": r.images_found,
-                            "images_downloaded": r.images_downloaded,
-                            "images_failed": r.images_failed,
-                            "total_bytes": r.total_bytes,
-                            "elapsed_seconds": r.elapsed_seconds,
-                            "errors": r.errors,
-                            "summary": r.summary(),
-                        }
-                    }
-                    
-                try:
-                    await websocket.send_json({"event": fe_event, "data": edata})
-                except Exception:
-                    # Connection closed or error sending
-                    break
-                finally:
-                    queue.task_done()
-                    
-        sender_task = asyncio.create_task(event_sender())
-        
-        # 3. Instantiate and run pipeline (with backup proxies for fallback)
-        pipeline = CrawlPipeline(config, on_progress=on_progress, backup_proxies=backup_proxies)
-        _crawl_bytes = 0
+        # Acquire concurrent crawl slot
         try:
-            result = await pipeline.run()
-            if result:
-                _crawl_bytes = getattr(result, 'total_bytes', 0)
-        except Exception as e:
-            logger.error("Crawl pipeline error: %s", e)
-            await websocket.send_json({"event": "error", "data": {"message": str(e)}})
+            await asyncio.wait_for(_crawl_semaphore.acquire(), timeout=5.0)
+        except asyncio.TimeoutError:
+            await websocket.send_json({"event": "error", "data": {"message": "Server busy. Max concurrent crawls reached. Please try again later."}})
+            await websocket.close()
+            return
+
+        try:
+            # Server-side proxy acquisition (no proxy URL sent to client)
+            proxy = None
+            _proxy_session_id = ""
+            proxy_result = await _acquire_proxy_internal(target_url=url)
+            if proxy_result.get("proxy_url"):
+                proxy = proxy_result["proxy_url"]
+                _proxy_session_id = proxy_result.get("session_id", "")
+                logger.info("Server-side proxy acquired for crawl (session=%s)", _proxy_session_id[:8])
+            else:
+                logger.info("No proxy available — using local IP")
+
+            # Load backup proxies from proxies.txt
+            backup_proxies: list[str] = []
+            _proxies_file = _get_proxies_file_path()
+            if _proxies_file and _proxies_file.exists():
+                try:
+                    for line in _proxies_file.read_text(encoding="utf-8").splitlines():
+                        line = line.strip()
+                        if line and not line.startswith("#") and line not in backup_proxies:
+                            backup_proxies.append(line)
+                except Exception:
+                    pass
+
+            config = CrawlConfig(
+                url=url,
+                output_dir=output_dir,
+                depth=depth,
+                max_pages=max_pages,
+                fetcher=fetcher,
+                min_file_size=min_file_size,
+                allowed_formats=allowed_formats,
+                create_dirs=True,
+                overwrite=False,
+                proxy=proxy,
+            )
+            
+            # 2. Set up thread-safe event queue for the websocket stream
+            queue = asyncio.Queue()
+
+            # Map backend event names → frontend event names
+            _EVENT_MAP = {
+                "crawl_start": "crawl_started",
+                "page_fetch": "page_started",
+                "page_parsed": "page_fetched",
+                "antibot_detected": "antibot_detected",
+                "js_detected": "js_detected",
+                "upgrade_failed": "upgrade_failed",
+                "download_start": "download_start",
+                "image_downloaded": "image_downloaded",
+                "download_done": "download_done",
+                "crawl_done": "crawl_done",
+                "gallery_empty": "gallery_empty",
+                "next_page": "next_page",
+                "proxy_fallback": "proxy_fallback",
+                "proxy_success": "proxy_success",
+                "local_ip_success": "local_ip_success",
+                "all_proxies_failed": "all_proxies_failed",
+            }
+            
+            def on_progress(event: str, event_data: Dict[str, Any]):
+                # Place event in queue to be consumed asynchronously
+                asyncio.get_event_loop().call_soon_threadsafe(queue.put_nowait, (event, event_data))
+                
+            # Background task to fetch from the queue and send to WebSocket
+            async def event_sender():
+                pages_visited = 0
+                images_found = 0
+                while True:
+                    event, edata = await queue.get()
+                    if event is None:
+                        queue.task_done()
+                        break
+
+                    # Translate event name for frontend
+                    fe_event = _EVENT_MAP.get(event, event)
+
+                    # Enrich page_fetched with running stats
+                    if event == "page_parsed":
+                        pages_visited += 1
+                        images_found += edata.get("images", 0)
+                        edata["pages_visited"] = pages_visited
+                        edata["images_found"] = images_found
+                        
+                    # Format CrawlResult for JSON serialization
+                    if event == "crawl_done" and "result" in edata:
+                        r = edata["result"]
+                        edata = {
+                            "result": {
+                                "start_url": r.start_url,
+                                "pages_visited": r.pages_visited,
+                                "images_found": r.images_found,
+                                "images_downloaded": r.images_downloaded,
+                                "images_failed": r.images_failed,
+                                "total_bytes": r.total_bytes,
+                                "elapsed_seconds": r.elapsed_seconds,
+                                "errors": r.errors,
+                                "summary": r.summary(),
+                            }
+                        }
+                        
+                    try:
+                        await websocket.send_json({"event": fe_event, "data": edata})
+                    except Exception:
+                        # Connection closed or error sending
+                        break
+                    finally:
+                        queue.task_done()
+                        
+            sender_task = asyncio.create_task(event_sender())
+            
+            # 3. Instantiate and run pipeline (with backup proxies for fallback)
+            pipeline = CrawlPipeline(config, on_progress=on_progress, backup_proxies=backup_proxies)
+            _crawl_bytes = 0
+            try:
+                result = await pipeline.run()
+                if result:
+                    _crawl_bytes = getattr(result, 'total_bytes', 0)
+            except Exception as e:
+                logger.error("Crawl pipeline error: %s", e)
+                await websocket.send_json({"event": "error", "data": {"message": str(e)}})
+            finally:
+                # Signal sender task to exit
+                await queue.put((None, None))
+                await sender_task
+                # Auto-release proxy session with bandwidth report
+                if _proxy_session_id:
+                    await _release_proxy_internal(_proxy_session_id, _crawl_bytes, "success")
+                    logger.info("Proxy session released (bytes=%d)", _crawl_bytes)
         finally:
-            # Signal sender task to exit
-            await queue.put((None, None))
-            await sender_task
-            # Auto-release proxy session with bandwidth report
-            if _proxy_session_id:
-                await _release_proxy_internal(_proxy_session_id, _crawl_bytes, "success")
-                logger.info("Proxy session released (bytes=%d)", _crawl_bytes)
+            _crawl_semaphore.release()
             
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected")
@@ -837,9 +1084,32 @@ async def ws_crawl(websocket: WebSocket):
             pass
 
 
+@app.get("/api/detect-mode")
+async def detect_mode(url: str = Query(..., description="URL to detect scraping mode for")):
+    """Auto-detect if a URL belongs to a supported e-commerce platform.
+
+    Returns recommended scrape mode ('images' or 'products') with site info.
+    """
+    try:
+        from webharvest.extractors.sites import detect_extractor
+        extractor = detect_extractor(url)
+        if extractor:
+            return {
+                "mode": "products",
+                "site": extractor.SITE_DOMAIN,
+                "fetcher": extractor.FETCHER_TYPE,
+                "message": f"Phát hiện trang {extractor.SITE_DOMAIN} — khuyến nghị chế độ Cào sản phẩm",
+            }
+    except Exception as e:
+        logger.warning("detect_mode error: %s", e)
+    return {"mode": "images", "site": None, "message": None}
+
+
 @app.get("/api/products")
 async def get_products(output_dir: str = Query("./output")):
     """Load extracted product data from local products.json file."""
+    _register_output_dir(output_dir)
+    _validate_file_path(str(Path(output_dir).expanduser().resolve()))
     resolved = Path(output_dir).expanduser().resolve()
     file_path = resolved / "products.json"
     if file_path.exists() and file_path.is_file():
@@ -858,6 +1128,21 @@ async def ws_product_crawl(websocket: WebSocket):
         # 1. Receive crawl config
         data = await websocket.receive_json()
         
+        # Check license validity and quota
+        try:
+            await _check_crawl_license("crawl")
+        except HTTPException as e:
+            detail = e.detail if isinstance(e.detail, dict) else {"error": str(e.detail)}
+            await websocket.send_json({
+                "event": "error",
+                "data": {
+                    "message": detail.get("error", "License validation failed"),
+                    "error_code": detail.get("error_code", "INVALID")
+                }
+            })
+            await websocket.close()
+            return
+
         urls = data.get("urls", [])
         if isinstance(urls, str):
             urls = [u.strip() for u in urls.splitlines() if u.strip()]
@@ -866,61 +1151,84 @@ async def ws_product_crawl(websocket: WebSocket):
             await websocket.send_json({"event": "error", "data": {"message": "At least one URL is required"}})
             await websocket.close()
             return
-            
+
+        # Validate URL schemes
+        for u in urls:
+            p = _urlparse(u)
+            if p.scheme not in ('http', 'https'):
+                await websocket.send_json({"event": "error", "data": {"message": f"Invalid URL scheme for '{u}'. Only http/https allowed."}})
+                await websocket.close()
+                return
+
         output_dir = data.get("output_dir", "./output").strip()
-        max_products = int(data.get("max_products", 50))
+        _register_output_dir(output_dir)
+        try:
+            max_products = max(1, min(int(data.get("max_products", 50)), 1000))
+        except (ValueError, TypeError):
+            max_products = 50
 
-        # Server-side proxy acquisition
-        proxy = None
-        _proxy_session_id = ""
-        proxy_result = await _acquire_proxy_internal(target_url=urls[0])
-        if proxy_result.get("proxy_url"):
-            proxy = proxy_result["proxy_url"]
-            _proxy_session_id = proxy_result.get("session_id", "")
-
-        backup_proxies: list[str] = []
-        if proxy:
-            backup_proxies.append(proxy)
-
-        # Queue for WebSocket streaming
-        queue = asyncio.Queue()
-
-        def on_progress(event: str, event_data: Dict[str, Any]):
-            asyncio.get_event_loop().call_soon_threadsafe(queue.put_nowait, (event, event_data))
-
-        async def event_sender():
-            while True:
-                event, edata = await queue.get()
-                if event is None:
-                    queue.task_done()
-                    break
-                try:
-                    await websocket.send_json({"event": event, "data": edata})
-                except Exception:
-                    break
-                finally:
-                    queue.task_done()
-
-        sender_task = asyncio.create_task(event_sender())
-
-        pipeline = ProductCrawlPipeline(
-            urls=urls,
-            output_dir=output_dir,
-            max_products=max_products,
-            proxies=backup_proxies,
-            on_progress=on_progress
-        )
+        # Acquire concurrent crawl slot
+        try:
+            await asyncio.wait_for(_crawl_semaphore.acquire(), timeout=5.0)
+        except asyncio.TimeoutError:
+            await websocket.send_json({"event": "error", "data": {"message": "Server busy. Max concurrent crawls reached. Please try again later."}})
+            await websocket.close()
+            return
 
         try:
-            await pipeline.run()
-        except Exception as e:
-            logger.error("Product crawl pipeline error: %s", e)
-            await websocket.send_json({"event": "error", "data": {"message": str(e)}})
+            # Server-side proxy acquisition
+            proxy = None
+            _proxy_session_id = ""
+            proxy_result = await _acquire_proxy_internal(target_url=urls[0])
+            if proxy_result.get("proxy_url"):
+                proxy = proxy_result["proxy_url"]
+                _proxy_session_id = proxy_result.get("session_id", "")
+
+            backup_proxies: list[str] = []
+            if proxy:
+                backup_proxies.append(proxy)
+
+            # Queue for WebSocket streaming
+            queue = asyncio.Queue()
+
+            def on_progress(event: str, event_data: Dict[str, Any]):
+                asyncio.get_event_loop().call_soon_threadsafe(queue.put_nowait, (event, event_data))
+
+            async def event_sender():
+                while True:
+                    event, edata = await queue.get()
+                    if event is None:
+                        queue.task_done()
+                        break
+                    try:
+                        await websocket.send_json({"event": event, "data": edata})
+                    except Exception:
+                        break
+                    finally:
+                        queue.task_done()
+
+            sender_task = asyncio.create_task(event_sender())
+
+            pipeline = ProductCrawlPipeline(
+                urls=urls,
+                output_dir=output_dir,
+                max_products=max_products,
+                proxies=backup_proxies,
+                on_progress=on_progress
+            )
+
+            try:
+                await pipeline.run()
+            except Exception as e:
+                logger.error("Product crawl pipeline error: %s", e)
+                await websocket.send_json({"event": "error", "data": {"message": str(e)}})
+            finally:
+                await queue.put((None, None))
+                await sender_task
+                if _proxy_session_id:
+                    await _release_proxy_internal(_proxy_session_id, 0, "success")
         finally:
-            await queue.put((None, None))
-            await sender_task
-            if _proxy_session_id:
-                await _release_proxy_internal(_proxy_session_id, 0, "success")
+            _crawl_semaphore.release()
 
     except WebSocketDisconnect:
         logger.info("WebSocket client disconnected")
@@ -1051,85 +1359,161 @@ async def ws_batch_crawl(websocket: WebSocket):
     try:
         data = await websocket.receive_json()
 
+        # Check license validity and quota initially
+        try:
+            await _check_crawl_license("batch_crawl")
+        except HTTPException as e:
+            detail = e.detail if isinstance(e.detail, dict) else {"error": str(e.detail)}
+            await websocket.send_json({
+                "event": "error",
+                "data": {
+                    "message": detail.get("error", "License validation failed"),
+                    "error_code": detail.get("error_code", "INVALID")
+                }
+            })
+            await websocket.close()
+            return
+
+        license_invalid = False
+
         urls = data.get("urls", [])
         if not urls or not isinstance(urls, list):
             await websocket.send_json({"event": "error", "data": {"message": "Danh sách URL trống."}})
             await websocket.close()
             return
 
+        # Validate URL schemes
+        for u in urls:
+            p = _urlparse(u)
+            if p.scheme not in ('http', 'https'):
+                await websocket.send_json({"event": "error", "data": {"message": f"Invalid URL scheme for '{u}'. Only http/https allowed."}})
+                await websocket.close()
+                return
+
         output_dir = data.get("output_dir", "./output").strip()
-        depth = int(data.get("depth", 0))
-        max_pages = int(data.get("max_pages", 20))
+        _register_output_dir(output_dir)
+
+        # Input validation with range capping
+        try:
+            depth = max(0, min(int(data.get("depth", 0)), 10))  # cap at 10
+        except (ValueError, TypeError):
+            depth = 0
+        try:
+            max_pages = max(1, min(int(data.get("max_pages", 20)), 1000))  # cap at 1000
+        except (ValueError, TypeError):
+            max_pages = 20
         fetcher_str = data.get("fetcher", "auto")
-        min_file_size = int(data.get("min_file_size", 0))
+        try:
+            min_file_size = int(data.get("min_file_size", 0))
+        except (ValueError, TypeError):
+            min_file_size = 0
         allowed_formats = set(data.get("allowed_formats", ["jpg", "jpeg", "png", "gif", "webp"]))
-        max_concurrent = int(data.get("max_concurrent_domains", 3))
+        try:
+            max_concurrent = max(1, min(int(data.get("max_concurrent_domains", 3)), 10))
+        except (ValueError, TypeError):
+            max_concurrent = 3
 
         try:
             fetcher = FetcherType(fetcher_str.lower())
         except ValueError:
             fetcher = FetcherType.AUTO
 
-        # Server-side proxy acquisition
-        proxy = None
-        _batch_proxy_session_id = ""
-        proxy_result = await _acquire_proxy_internal(target_url=urls[0] if urls else "")
-        if proxy_result.get("proxy_url"):
-            proxy = proxy_result["proxy_url"]
-            _batch_proxy_session_id = proxy_result.get("session_id", "")
-
-        backup_proxies: list[str] = []
-        if proxy:
-            backup_proxies.append(proxy)
-
-        # Check disk space
-        ok_disk, free_gb = _check_disk_space(output_dir)
-        if not ok_disk:
-            await websocket.send_json({
-                "event": "error",
-                "data": {
-                    "message": f"Dung lượng ổ đĩa còn {free_gb:.1f}GB, cần tối thiểu 2GB. "
-                               f"Vui lòng giải phóng dung lượng trước khi batch crawl."
-                }
-            })
+        # Acquire concurrent crawl slot
+        try:
+            await asyncio.wait_for(_crawl_semaphore.acquire(), timeout=5.0)
+        except asyncio.TimeoutError:
+            await websocket.send_json({"event": "error", "data": {"message": "Server busy. Max concurrent crawls reached. Please try again later."}})
             await websocket.close()
             return
 
-        # Create batch folder
-        timestamp = datetime.now().strftime("%Y-%m-%d_%Hh%M")
-        batch_folder_name = f"batch_{timestamp}"
-        batch_dir = Path(output_dir).expanduser().resolve() / batch_folder_name
-        batch_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            # Server-side proxy acquisition
+            proxy = None
+            _batch_proxy_session_id = ""
+            proxy_result = await _acquire_proxy_internal(target_url=urls[0] if urls else "")
+            if proxy_result.get("proxy_url"):
+                proxy = proxy_result["proxy_url"]
+                _batch_proxy_session_id = proxy_result.get("session_id", "")
 
-        # Group URLs by domain for rate limiting
-        domain_groups: dict[str, list[tuple[int, str]]] = defaultdict(list)
-        for idx, url in enumerate(urls):
-            domain = _sanitize_domain(url)
-            domain_groups[domain].append((idx, url))
+            backup_proxies: list[str] = []
+            if proxy:
+                backup_proxies.append(proxy)
 
-        total_urls = len(urls)
-        results: list[dict] = [None] * total_urls  # type: ignore[list-item]
-        success_count = 0
-        failed_count = 0
+            # Check disk space
+            ok_disk, free_gb = _check_disk_space(output_dir)
+            if not ok_disk:
+                await websocket.send_json({
+                    "event": "error",
+                    "data": {
+                        "message": f"Dung lượng ổ đĩa còn {free_gb:.1f}GB, cần tối thiểu 2GB. "
+                                   f"Vui lòng giải phóng dung lượng trước khi batch crawl."
+                    }
+                })
+                await websocket.close()
+                return
 
-        await websocket.send_json({
-            "event": "batch_start",
-            "data": {
-                "total_urls": total_urls,
-                "batch_folder": str(batch_dir),
-                "domain_groups": len(domain_groups),
-            }
-        })
+            # Create batch folder
+            timestamp = datetime.now().strftime("%Y-%m-%d_%Hh%M")
+            batch_folder_name = f"batch_{timestamp}"
+            batch_dir = Path(output_dir).expanduser().resolve() / batch_folder_name
+            batch_dir.mkdir(parents=True, exist_ok=True)
 
-        # Semaphore for domain concurrency
-        domain_sem = asyncio.Semaphore(max_concurrent)
+            # Group URLs by domain for rate limiting
+            domain_groups: dict[str, list[tuple[int, str]]] = defaultdict(list)
+            for idx, url in enumerate(urls):
+                domain = _sanitize_domain(url)
+                domain_groups[domain].append((idx, url))
 
-        async def crawl_domain_group(domain: str, url_list: list[tuple[int, str]]):
-            """Crawl all URLs for one domain sequentially."""
-            nonlocal success_count, failed_count
+            total_urls = len(urls)
+            results: list[dict] = [None] * total_urls  # type: ignore[list-item]
+            success_count = 0
+            failed_count = 0
+
+            await websocket.send_json({
+                "event": "batch_start",
+                "data": {
+                    "total_urls": total_urls,
+                    "batch_folder": str(batch_dir),
+                    "domain_groups": len(domain_groups),
+                }
+            })
+
+            # Semaphore for domain concurrency
+            domain_sem = asyncio.Semaphore(max_concurrent)
+
+            async def crawl_domain_group(domain: str, url_list: list[tuple[int, str]]):
+                """Crawl all URLs for one domain sequentially."""
+                nonlocal success_count, failed_count, license_invalid
 
             async with domain_sem:
                 for idx, url in url_list:
+                    if license_invalid:
+                        break
+
+                    # Check license validity and quota
+                    try:
+                        await _check_crawl_license("batch_crawl")
+                    except HTTPException as e:
+                        license_invalid = True
+                        detail = e.detail if isinstance(e.detail, dict) else {"error": str(e.detail)}
+                        err_msg = detail.get("error", "License validation failed")
+                        err_code = detail.get("error_code", "INVALID")
+                        try:
+                            await websocket.send_json({
+                                "event": "batch_url_error",
+                                "data": {"index": idx, "url": url, "error": err_msg}
+                            })
+                            await websocket.send_json({
+                                "event": "error",
+                                "data": {
+                                    "message": err_msg,
+                                    "error_code": err_code
+                                }
+                            })
+                        except Exception:
+                            pass
+                        break
+
                     # Check if WebSocket is still connected
                     try:
                         await websocket.send_json({
@@ -1298,39 +1682,41 @@ async def ws_batch_crawl(websocket: WebSocket):
                     if url_list[-1] != (idx, url):  # not last URL
                         await asyncio.sleep(2.0)
 
-        # Launch all domain groups concurrently (limited by semaphore)
-        domain_tasks = [
-            asyncio.create_task(crawl_domain_group(domain, url_list))
-            for domain, url_list in domain_groups.items()
-        ]
-        await asyncio.gather(*domain_tasks, return_exceptions=True)
+            # Launch all domain groups concurrently (limited by semaphore)
+            domain_tasks = [
+                asyncio.create_task(crawl_domain_group(domain, url_list))
+                for domain, url_list in domain_groups.items()
+            ]
+            await asyncio.gather(*domain_tasks, return_exceptions=True)
 
-        # Write batch report
-        report = {
-            "batch_folder": str(batch_dir),
-            "timestamp": datetime.now().isoformat(),
-            "total_urls": total_urls,
-            "success": success_count,
-            "failed": failed_count,
-            "results": [r for r in results if r is not None],
-        }
-        try:
-            report_path = batch_dir / "batch_report.json"
-            report_path.write_text(
-                _json.dumps(report, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
-        except Exception as e:
-            logger.error("Failed to write batch report: %s", e)
+            # Write batch report
+            report = {
+                "batch_folder": str(batch_dir),
+                "timestamp": datetime.now().isoformat(),
+                "total_urls": total_urls,
+                "success": success_count,
+                "failed": failed_count,
+                "results": [r for r in results if r is not None],
+            }
+            try:
+                report_path = batch_dir / "batch_report.json"
+                report_path.write_text(
+                    _json.dumps(report, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+            except Exception as e:
+                logger.error("Failed to write batch report: %s", e)
 
-        # Send final batch_done event
-        try:
-            await websocket.send_json({
-                "event": "batch_done",
-                "data": report
-            })
-        except Exception:
-            pass
+            # Send final batch_done event
+            try:
+                await websocket.send_json({
+                    "event": "batch_done",
+                    "data": report
+                })
+            except Exception:
+                pass
+        finally:
+            _crawl_semaphore.release()
 
     except WebSocketDisconnect:
         logger.info("Batch WebSocket client disconnected")

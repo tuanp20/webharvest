@@ -69,6 +69,11 @@ class ValidationResult:
     daily_urls_used: int = 0
     daily_urls_remaining: int = 0
 
+    # Trial-specific fields
+    is_trial: bool = False
+    trial_remaining: int = 0
+    trial_total: int = 0
+
     def __post_init__(self):
         if self.allowed_fetchers is None:
             self.allowed_fetchers = []
@@ -90,6 +95,9 @@ class ValidationResult:
                 "allowed_fetchers": self.allowed_fetchers,
                 "daily_urls_used": self.daily_urls_used,
                 "daily_urls_remaining": self.daily_urls_remaining,
+                "is_trial": self.is_trial,
+                "trial_remaining": self.trial_remaining,
+                "trial_total": self.trial_total,
             },
         }
 

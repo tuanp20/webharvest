@@ -12,6 +12,8 @@ import hashlib
 import logging
 import os
 import secrets
+import time
+from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Optional
@@ -27,6 +29,7 @@ from . import database as db
 from .config import (
     Settings, TIERS, PRICING, VALID_DURATIONS, VALID_TIERS,
     get_price, get_tier_config, tier_to_dict, packages_list, MAX_REBINDS,
+    TRIAL_MAX_URLS, TRIAL_EXPIRY_DAYS,
 )
 from .license import generate_key, is_valid_key_format, ValidationResult, generate_order_code
 from .payos_service import PayOSService, PayOSError
@@ -39,8 +42,56 @@ settings: Settings = None
 payos: PayOSService = None
 proxy_svc: DataImpulseProxyService = None
 
-# Simple admin token store (in-memory, reset on restart)
-_admin_tokens: set[str] = set()
+
+# ── Rate Limiter ──────────────────────────────────────────────────────────
+
+class _RateLimiter:
+    """Simple in-memory rate limiter."""
+    def __init__(self):
+        self._requests: dict[str, list[float]] = defaultdict(list)
+
+    def is_allowed(self, key: str, max_requests: int, window_seconds: int) -> bool:
+        now = time.time()
+        self._requests[key] = [t for t in self._requests[key] if now - t < window_seconds]
+        if len(self._requests[key]) >= max_requests:
+            return False
+        self._requests[key].append(now)
+        return True
+
+    def cleanup(self):
+        now = time.time()
+        expired_keys = [k for k, v in self._requests.items() if all(now - t > 3600 for t in v)]
+        for k in expired_keys:
+            del self._requests[k]
+
+_rate_limiter = _RateLimiter()
+
+
+# ── Admin Token Store (in-memory, reset on restart) ───────────────────────
+
+_admin_tokens: dict[str, float] = {}  # token -> expires_at timestamp
+_ADMIN_TOKEN_TTL = 8 * 3600  # 8 hours
+
+
+def _validate_admin_token(token: str) -> bool:
+    """Check admin token validity including expiry."""
+    expires_at = _admin_tokens.get(token)
+    if not expires_at:
+        return False
+    if time.time() > expires_at:
+        _admin_tokens.pop(token, None)
+        return False
+    return True
+
+
+def _escape_html(text: str) -> str:
+    """Escape HTML special characters."""
+    return (text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#x27;"))
 
 
 @asynccontextmanager
@@ -71,6 +122,9 @@ async def lifespan(app: FastAPI):
     # Start background auto-expire task
     asyncio.create_task(_auto_expire_loop())
 
+    # Start rate limiter cleanup task
+    asyncio.create_task(_rate_limiter_cleanup_loop())
+
     logger.info("License server started on %s:%d", settings.host, settings.port)
     yield
 
@@ -95,19 +149,41 @@ async def _auto_expire_loop():
         await asyncio.sleep(300)
 
 
+async def _rate_limiter_cleanup_loop():
+    """Background task: clean up stale rate limiter entries every 10 minutes."""
+    while True:
+        try:
+            _rate_limiter.cleanup()
+            # Also clean expired admin tokens
+            now = time.time()
+            expired = [t for t, exp in _admin_tokens.items() if now > exp]
+            for t in expired:
+                _admin_tokens.pop(t, None)
+        except Exception as e:
+            logger.error("Rate limiter cleanup error: %s", e)
+        await asyncio.sleep(600)
+
+
 app = FastAPI(
     title="WebHarvest License Server",
     version="1.0.0",
     lifespan=lifespan,
 )
 
-# CORS for desktop apps
+# CORS — whitelisted origins only
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://webharvest.twentypi.com",
+        "https://api.webharvest.twentypi.com",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:8443",
+        "http://127.0.0.1:8443",
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Content-Type", "Authorization", "X-Session-Token"],
 )
 
 
@@ -135,7 +211,7 @@ async def _require_admin(request: Request):
     """Dependency: require valid admin token."""
     auth = request.headers.get("Authorization", "")
     token = auth.replace("Bearer ", "").strip()
-    if not token or token not in _admin_tokens:
+    if not token or not _validate_admin_token(token):
         raise HTTPException(status_code=401, detail="Unauthorized")
     return token
 
@@ -144,7 +220,24 @@ async def _require_admin(request: Request):
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "service": "webharvest-license-server", "version": "1.0.0"}
+    db_healthy = False
+    try:
+        if not db.is_mock:
+            async with db.pool.acquire() as conn:
+                await conn.fetchval("SELECT 1")
+            db_healthy = True
+        else:
+            db_healthy = True  # Mock is always "healthy"
+    except Exception:
+        pass
+
+    status = "ok" if db_healthy else "degraded"
+    return {
+        "status": status,
+        "version": "1.1.0",
+        "database": "connected" if db_healthy else "disconnected",
+        "mock_mode": db.is_mock,
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -245,6 +338,11 @@ class ValidateRequest(BaseModel):
 
 @app.post("/api/license/validate")
 async def validate_license(req: ValidateRequest, request: Request):
+    # Rate limit: 120 validation requests per minute per IP
+    client_ip = _get_client_ip(request)
+    if not _rate_limiter.is_allowed(f"validate:{client_ip}", max_requests=120, window_seconds=60):
+        raise HTTPException(status_code=429, detail={"error_code": "RATE_LIMITED", "message": "Too many requests"})
+
     if not is_valid_key_format(req.key):
         return JSONResponse(status_code=400, content=ValidationResult(
             valid=False, error="Invalid key format", error_code="INVALID_FORMAT"
@@ -272,6 +370,34 @@ async def validate_license(req: ValidateRequest, request: Request):
         ).to_dict())
 
     tier_cfg = get_tier_config(key_row["tier"])
+    is_trial = key_row["tier"] == "trial"
+
+    # Trial-specific checks: exhausted or expired
+    if is_trial:
+        total_urls = key_row.get("total_urls", 0)
+        trial_remaining = max(0, TRIAL_MAX_URLS - total_urls)
+
+        # Check if trial time-expired (belt-and-suspenders with DB check)
+        if key_row.get("expires_at") and key_row["expires_at"] < datetime.now(timezone.utc):
+            await db.log_request(key_id=key_row["id"], action=req.action, url=req.url, status="error",
+                                 error_message="Trial expired",
+                                 ip_address=_get_client_ip(request), device_id=req.device_id)
+            return JSONResponse(status_code=403, content=ValidationResult(
+                valid=False, error="Trial period has expired",
+                error_code="TRIAL_EXPIRED", tier="trial",
+                is_trial=True, trial_remaining=0, trial_total=TRIAL_MAX_URLS,
+            ).to_dict())
+
+        # Check if trial URL quota exhausted
+        if total_urls >= TRIAL_MAX_URLS:
+            await db.log_request(key_id=key_row["id"], action=req.action, url=req.url, status="error",
+                                 error_message=f"Trial exhausted ({total_urls}/{TRIAL_MAX_URLS})",
+                                 ip_address=_get_client_ip(request), device_id=req.device_id)
+            return JSONResponse(status_code=403, content=ValidationResult(
+                valid=False, error=f"Trial URL limit reached ({total_urls}/{TRIAL_MAX_URLS})",
+                error_code="TRIAL_EXHAUSTED", tier="trial",
+                is_trial=True, trial_remaining=0, trial_total=TRIAL_MAX_URLS,
+            ).to_dict())
 
     # Check daily limit
     daily_used = await db.get_daily_usage(key_row["id"])
@@ -285,6 +411,9 @@ async def validate_license(req: ValidateRequest, request: Request):
             valid=False, error=f"Daily URL limit reached ({daily_used}/{max_daily})",
             error_code="RATE_LIMITED", tier=key_row["tier"],
             daily_urls_used=daily_used, daily_urls_remaining=0,
+            is_trial=is_trial,
+            trial_remaining=max(0, TRIAL_MAX_URLS - key_row.get("total_urls", 0)) if is_trial else 0,
+            trial_total=TRIAL_MAX_URLS if is_trial else 0,
         ).to_dict())
 
     # Check batch_crawl permission
@@ -304,6 +433,14 @@ async def validate_license(req: ValidateRequest, request: Request):
     await db.log_request(key_id=key_row["id"], action=req.action, url=req.url, status="success",
                          ip_address=_get_client_ip(request), device_id=req.device_id)
 
+    # Recalculate trial remaining after potential increment
+    trial_remaining_final = 0
+    if is_trial:
+        current_total = key_row.get("total_urls", 0)
+        if req.action in ("crawl", "batch_crawl"):
+            current_total += 1  # Account for the increment we just did
+        trial_remaining_final = max(0, TRIAL_MAX_URLS - current_total)
+
     return ValidationResult(
         valid=True, tier=key_row["tier"],
         tier_name=tier_cfg.name if tier_cfg else key_row["tier"],
@@ -316,6 +453,9 @@ async def validate_license(req: ValidateRequest, request: Request):
         allowed_fetchers=tier_cfg.allowed_fetchers if tier_cfg else ["static"],
         daily_urls_used=daily_used,
         daily_urls_remaining=max(0, max_daily - daily_used),
+        is_trial=is_trial,
+        trial_remaining=trial_remaining_final,
+        trial_total=TRIAL_MAX_URLS if is_trial else 0,
     ).to_dict()
 
 
@@ -361,6 +501,57 @@ async def rebind_license(req: RebindRequest, request: Request):
         raise HTTPException(status_code=404, detail="Key not found or not active")
 
     return {"success": True, "data": _serialize_row(result)}
+
+
+# ── Trial Key Request ────────────────────────────────────────────────────
+
+class TrialRequest(BaseModel):
+    device_id: str
+    device_name: str = ""
+    email: str = ""
+
+
+@app.post("/api/license/request-trial")
+async def request_trial(req: TrialRequest, request: Request):
+    """Request a free trial key for a device."""
+    # Rate limit: 3 trial requests per day per IP
+    client_ip = _get_client_ip(request)
+    if not _rate_limiter.is_allowed(f"trial:{client_ip}", max_requests=3, window_seconds=86400):
+        raise HTTPException(status_code=429, detail={"error_code": "RATE_LIMITED", "message": "Too many requests"})
+
+    if not req.device_id or not req.device_id.strip():
+        return JSONResponse(status_code=400, content={
+            "success": False, "error": "device_id is required", "error_code": "INVALID_REQUEST",
+        })
+
+    try:
+        key_row = await db.create_trial_key(
+            device_id=req.device_id.strip(),
+            device_name=req.device_name,
+            email=req.email or None,
+        )
+    except Exception as e:
+        logger.error("Trial key creation failed: %s", e)
+        return JSONResponse(status_code=500, content={
+            "success": False, "error": "Failed to create trial key", "error_code": "INTERNAL_ERROR",
+        })
+
+    total_urls = key_row.get("total_urls", 0)
+    remaining = max(0, TRIAL_MAX_URLS - total_urls)
+
+    await db.log_request(
+        key_id=key_row["id"], action="request_trial", status="success",
+        ip_address=_get_client_ip(request), device_id=req.device_id,
+    )
+    logger.info("Trial key requested: device=%s key=%s", req.device_id[:16], key_row["key"])
+
+    return {
+        "success": True,
+        "key": key_row["key"],
+        "remaining": remaining,
+        "expires_in_days": TRIAL_EXPIRY_DAYS,
+        "all_features_unlocked": True,
+    }
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -468,7 +659,12 @@ class CreatePaymentRequest(BaseModel):
 
 
 @app.post("/api/payments/create-link")
-async def create_payment_link(req: CreatePaymentRequest):
+async def create_payment_link(req: CreatePaymentRequest, request: Request):
+    # Rate limit: 10 payment link creations per minute per IP
+    client_ip = _get_client_ip(request)
+    if not _rate_limiter.is_allowed(f"payment:{client_ip}", max_requests=10, window_seconds=60):
+        raise HTTPException(status_code=429, detail={"error_code": "RATE_LIMITED", "message": "Too many requests"})
+
     if req.tier not in VALID_TIERS:
         raise HTTPException(status_code=400, detail=f"Invalid tier: {req.tier}")
     if req.duration_months not in VALID_DURATIONS:
@@ -515,15 +711,15 @@ async def create_payment_link(req: CreatePaymentRequest):
 
 @app.post("/api/payments/webhook")
 async def payment_webhook(request: Request):
-    """PayOS webhook — MUST always return 200 (same as xuongmedia)."""
+    """PayOS webhook — verify signature and process payment."""
     try:
         body = await request.json()
 
-        # Verify signature
+        # Verify signature — reject unverified payloads
         verified_data = payos.verify_webhook(body)
         if not verified_data:
             logger.warning("Webhook verification failed")
-            return {"success": True, "data": {"received": True, "note": "verification_skipped"}}
+            return JSONResponse(status_code=400, content={"success": False, "error": "verification_failed"})
 
         order_code = int(verified_data.get("orderCode", 0))
 
@@ -531,30 +727,50 @@ async def payment_webhook(request: Request):
         if not order_code or order_code == 0:
             return {"success": True, "data": {"received": True, "test": True}}
 
-        # Check if paid
+        # Idempotency: if already settled, return 200 immediately
+        existing_tx = await db.get_transaction_by_order(order_code)
+        if existing_tx and existing_tx["status"] == "paid":
+            logger.info("Webhook idempotent skip: order=%d already settled", order_code)
+            return {"success": True, "data": {"received": True, "already_processed": True}}
+
+        # Check if paid — only use verified_data, never unverified body
         is_paid = (
             verified_data.get("code") == "00"
-            or body.get("code") == "00"
-            or body.get("success") is True
-            or "thanh cong" in str(verified_data.get("desc", body.get("desc", ""))).lower()
+            or "thanh cong" in str(verified_data.get("desc", "")).lower()
         )
 
         if is_paid:
+            # Amount verification: compare webhook amount with stored transaction
+            if existing_tx:
+                webhook_amount = int(verified_data.get("amount", 0))
+                expected_amount = int(existing_tx.get("amount", 0))
+                if webhook_amount and expected_amount and webhook_amount != expected_amount:
+                    logger.warning(
+                        "Amount mismatch for order %d: webhook=%d expected=%d",
+                        order_code, webhook_amount, expected_amount,
+                    )
+                    return JSONResponse(status_code=400, content={"success": False, "error": "amount_mismatch"})
+
             new_key = generate_key()
             result = await db.settle_payment(order_code, verified_data, new_key)
             if result:
                 logger.info("Payment settled: order=%d key=%s", order_code, result.get("key", "extended"))
                 if result.get("owner_email"):
+                    safe_name = _escape_html(result.get("owner_name") or "Quý khách")
                     asyncio.create_task(
                         send_license_email(
                             settings,
                             result["owner_email"],
-                            result.get("owner_name") or "Quý khách",
+                            safe_name,
                             result["key"],
                             result["tier"].capitalize(),
                             result["duration_months"]
                         )
                     )
+            else:
+                # settle_payment returned None — internal error, return 500 so PayOS retries
+                logger.error("settle_payment failed for order=%d", order_code)
+                return JSONResponse(status_code=500, content={"success": False, "error": "internal_processing_failed"})
         else:
             await db.cancel_transaction(order_code)
 
@@ -562,7 +778,8 @@ async def payment_webhook(request: Request):
 
     except Exception as e:
         logger.error("Webhook error: %s", e)
-        return {"success": True, "data": {"received": True, "error": "internal"}}
+        # Return 500 so PayOS will retry
+        return JSONResponse(status_code=500, content={"success": False, "error": "internal"})
 
 
 class VerifyPendingRequest(BaseModel):
@@ -601,11 +818,12 @@ async def verify_pending(req: VerifyPendingRequest):
         result = await db.settle_payment(req.order_code, payos_info, new_key)
         if result:
             if result.get("owner_email"):
+                safe_name = _escape_html(result.get("owner_name") or "Quý khách")
                 asyncio.create_task(
                     send_license_email(
                         settings,
                         result["owner_email"],
-                        result.get("owner_name") or "Quý khách",
+                        safe_name,
                         result["key"],
                         result["tier"].capitalize(),
                         result["duration_months"]
@@ -632,11 +850,16 @@ class AdminLoginRequest(BaseModel):
 
 
 @app.post("/api/admin/auth")
-async def admin_login(req: AdminLoginRequest):
+async def admin_login(req: AdminLoginRequest, request: Request):
+    # Rate limit: 5 login attempts per minute per IP
+    client_ip = _get_client_ip(request)
+    if not _rate_limiter.is_allowed(f"admin_auth:{client_ip}", max_requests=5, window_seconds=60):
+        raise HTTPException(status_code=429, detail={"error_code": "RATE_LIMITED", "message": "Too many requests"})
+
     if req.password != settings.admin_password:
         raise HTTPException(status_code=401, detail="Invalid password")
     token = secrets.token_hex(32)
-    _admin_tokens.add(token)
+    _admin_tokens[token] = time.time() + _ADMIN_TOKEN_TTL
     return {"success": True, "token": token}
 
 
@@ -652,7 +875,7 @@ async def admin_dashboard(
 @app.get("/api/admin/keys")
 async def admin_list_keys(
     status: str = None, tier: str = None, search: str = None,
-    page: int = 1, limit: int = 50,
+    page: int = 1, limit: int = Query(default=50, le=200),
     _token: str = Depends(_require_admin),
 ):
     keys, total = await db.get_all_keys(status=status, tier=tier, search=search, page=page, limit=limit)
@@ -752,7 +975,7 @@ async def admin_delete_key(key: str, _token: str = Depends(_require_admin)):
 async def admin_request_logs(
     key_id: int = None, status: str = None,
     date_from: str = None, date_to: str = None,
-    page: int = 1, limit: int = 50,
+    page: int = 1, limit: int = Query(default=50, le=200),
     _token: str = Depends(_require_admin),
 ):
     logs, total = await db.get_request_logs(
@@ -785,7 +1008,7 @@ async def admin_proxy_stats(_token: str = Depends(_require_admin)):
 @app.get("/api/admin/proxy/sessions")
 async def admin_proxy_sessions(
     license_key: str = None, status: str = None,
-    page: int = 1, limit: int = 50,
+    page: int = 1, limit: int = Query(default=50, le=200),
     _token: str = Depends(_require_admin),
 ):
     """List proxy session history."""

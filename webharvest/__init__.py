@@ -5,7 +5,7 @@ Combines the best ideas from gallery-dl (CLI design), crawl4ai (async pipeline),
 and scrapling (fetcher factory pattern) into a unified toolkit.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 __author__ = "WebHarvest Contributors"
 
 # Existing models (from other modules)

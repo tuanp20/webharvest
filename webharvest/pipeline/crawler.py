@@ -30,7 +30,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
+from urllib.robotparser import RobotFileParser
 
 import httpx
 from selectolax.parser import HTMLParser
@@ -208,6 +209,13 @@ class StaticFetcher(BaseFetcher):
                                        url, backoff, attempt + 1, config.retry_count)
                         await asyncio.sleep(backoff)
                         continue
+                # Retry on 5xx server errors with exponential backoff
+                if resp.status_code >= 500 and attempt < config.retry_count - 1:
+                    wait = min(2 ** attempt, 10)  # 1s, 2s, 4s max 10s
+                    logger.warning("StaticFetcher: server error %d for %s, retrying in %ds (attempt %d/%d)...",
+                                   resp.status_code, url, wait, attempt + 1, config.retry_count)
+                    await asyncio.sleep(wait)
+                    continue
                 return resp.text, resp.status_code
             except (httpx.HTTPError, httpx.TimeoutException) as exc:
                 if attempt == config.retry_count - 1:
@@ -515,7 +523,8 @@ def _extract_links(html: str, page_url: str, config: CrawlConfig) -> List[str]:
         if not href or href.startswith(("#", "mailto:", "tel:", "javascript:")):
             continue
 
-        abs_url = urljoin(page_url, href).split("#")[0].split("?")[0]  # normalise
+        # Normalize: resolve relative URL, strip fragment only, keep query params
+        abs_url = _normalize_url(href, page_url)
         parsed = urlparse(abs_url)
 
         if not parsed.scheme.startswith("http"):
@@ -554,6 +563,54 @@ def _extract_pagination_link(html: str, page_url: str, selectors: List[str]) -> 
 
 
 # ---------------------------------------------------------------------------
+# URL normalization
+# ---------------------------------------------------------------------------
+def _normalize_url(url: str, page_url: str = '') -> str:
+    """Normalize URL: resolve relative, remove fragment, keep query params."""
+    if page_url:
+        url = urljoin(page_url, url)
+    parsed = urlparse(url)
+    # Only strip fragment (#), keep query (?key=value)
+    normalized = urlunparse(parsed._replace(fragment=''))
+    return normalized
+
+
+# ---------------------------------------------------------------------------
+# robots.txt checker
+# ---------------------------------------------------------------------------
+class RobotsChecker:
+    """Cache and check robots.txt for multiple domains."""
+
+    def __init__(self):
+        self._cache: dict[str, Optional[RobotFileParser]] = {}
+
+    def can_fetch(self, url: str, user_agent: str = '*') -> bool:
+        """Check if *url* is allowed by the domain's robots.txt.
+
+        This is a synchronous method — call via ``asyncio.to_thread`` from
+        async code so the blocking ``rp.read()`` doesn't stall the loop.
+        """
+        parsed = urlparse(url)
+        domain = f"{parsed.scheme}://{parsed.netloc}"
+
+        if domain not in self._cache:
+            rp = RobotFileParser()
+            rp.set_url(f"{domain}/robots.txt")
+            try:
+                rp.read()
+            except Exception:
+                # If robots.txt can't be read, allow access
+                self._cache[domain] = None
+                return True
+            self._cache[domain] = rp
+
+        checker = self._cache.get(domain)
+        if checker is None:
+            return True
+        return checker.can_fetch(user_agent, url)
+
+
+# ---------------------------------------------------------------------------
 # Progress callback type
 # ---------------------------------------------------------------------------
 ProgressCallback = Callable[[str, Dict[str, Any]], None]
@@ -586,6 +643,10 @@ class CrawlPipeline:
         self._image_urls_seen: Set[str] = set()
         self._queue: deque = deque()  # (url, depth)
         self._download_semaphore: Optional[asyncio.Semaphore] = None
+        self._download_lock: asyncio.Lock = asyncio.Lock()
+        self._robots_checker: Optional[RobotsChecker] = (
+            RobotsChecker() if config.respect_robots_txt else None
+        )
 
     # ------------------------------------------------------------------
     # Public API
@@ -632,9 +693,21 @@ class CrawlPipeline:
             batch: List[Tuple[str, int]] = []
             while self._queue and len(batch) < self.config.concurrent_fetches:
                 url, depth = self._queue.popleft()
-                if url not in self._visited and depth <= self.config.depth:
-                    batch.append((url, depth))
-                    self._visited.add(url)
+                if url in self._visited or depth > self.config.depth:
+                    continue
+                # Check robots.txt before queueing for fetch
+                if self._robots_checker:
+                    try:
+                        allowed = await asyncio.to_thread(
+                            self._robots_checker.can_fetch, url, self.config.user_agent,
+                        )
+                    except Exception:
+                        allowed = True  # fail-open
+                    if not allowed:
+                        logger.info("Blocked by robots.txt: %s", url)
+                        continue
+                batch.append((url, depth))
+                self._visited.add(url)
 
             if not batch:
                 break
@@ -671,6 +744,17 @@ class CrawlPipeline:
         while current_url and result.pages_visited < self.config.max_pages:
             if current_url in self._visited:
                 break
+            # Check robots.txt before fetching
+            if self._robots_checker:
+                try:
+                    allowed = await asyncio.to_thread(
+                        self._robots_checker.can_fetch, current_url, self.config.user_agent,
+                    )
+                except Exception:
+                    allowed = True  # fail-open
+                if not allowed:
+                    logger.info("Blocked by robots.txt: %s", current_url)
+                    break
             self._visited.add(current_url)
 
             page = await self._fetch_and_parse(current_url, result)
@@ -906,15 +990,24 @@ class CrawlPipeline:
     ):
         """Download a single image with semaphore control."""
         async with sem:
-            if self.config.max_images and result.images_downloaded >= self.config.max_images:
-                return
+            # Atomic check-and-reserve under lock to prevent race conditions
+            # when multiple tasks download concurrently.
+            async with self._download_lock:
+                if self.config.max_images and result.images_downloaded >= self.config.max_images:
+                    return
+                # Reserve the slot before releasing the lock
+                result.images_downloaded += 1
+            slot_reserved = True
 
             for attempt in range(self.config.retry_count):
                 try:
                     resp = await client.get(img.url)
                     if resp.status_code != 200:
                         if attempt == self.config.retry_count - 1:
-                            result.images_failed += 1
+                            # Give back the reserved slot on failure
+                            async with self._download_lock:
+                                result.images_downloaded -= 1
+                                result.images_failed += 1
                             result.errors.append(f"HTTP {resp.status_code}: {img.url}")
                         continue
 
@@ -923,6 +1016,9 @@ class CrawlPipeline:
 
                     # Min size filter
                     if self.config.min_file_size and file_size < self.config.min_file_size:
+                        # Give back the reserved slot
+                        async with self._download_lock:
+                            result.images_downloaded -= 1
                         return
 
                     # Determine output path
@@ -953,8 +1049,8 @@ class CrawlPipeline:
                     img.file_size = file_size
                     img.local_path = str(filepath)
 
-                    result.images_downloaded += 1
-                    result.total_bytes += file_size
+                    async with self._download_lock:
+                        result.total_bytes += file_size
                     result.downloaded_files.append(str(filepath))
 
                     self._emit("image_downloaded", {
@@ -967,7 +1063,10 @@ class CrawlPipeline:
 
                 except (httpx.HTTPError, httpx.TimeoutException) as exc:
                     if attempt == self.config.retry_count - 1:
-                        result.images_failed += 1
+                        # Give back the reserved slot on final failure
+                        async with self._download_lock:
+                            result.images_downloaded -= 1
+                            result.images_failed += 1
                         result.errors.append(f"Download failed {img.url}: {exc}")
                     await asyncio.sleep(1 * (attempt + 1))
 

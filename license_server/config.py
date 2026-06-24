@@ -60,6 +60,17 @@ TIERS: Dict[str, TierConfig] = {
         proxy_session_ttl=600,
         max_concurrent_proxy=5,
     ),
+    "trial": TierConfig(
+        name="Dùng thử",
+        max_daily_urls=20,
+        max_concurrent=5,
+        allowed_fetchers=["auto", "static", "dynamic", "stealth"],
+        batch_crawl=True,
+        stealth_mode=True,
+        proxy_quota_gb=0.5,
+        proxy_session_ttl=300,
+        max_concurrent_proxy=3,
+    ),
 }
 
 
@@ -90,6 +101,10 @@ VALIDATION_CACHE_TTL = 300  # 5 minutes
 
 # Offline grace period (seconds) — desktop app allows offline usage this long
 OFFLINE_GRACE_PERIOD = 86_400  # 24 hours
+
+# Trial system
+TRIAL_MAX_URLS = 20  # Total lifetime URLs for trial
+TRIAL_EXPIRY_DAYS = 14  # Trial expires after 14 days
 
 
 # ── Environment Config ────────────────────────────────────────────────────
@@ -189,6 +204,27 @@ def tier_to_dict(tier: str) -> dict | None:
 def packages_list() -> list[dict]:
     """Return all packages for the pricing page."""
     result = []
+
+    # Add trial package (free)
+    trial_cfg = TIERS.get("trial")
+    if trial_cfg:
+        result.append({
+            "tier": "trial",
+            "tier_name": trial_cfg.name,
+            "duration_months": 0,
+            "duration_label": f"{TRIAL_EXPIRY_DAYS} ngày",
+            "price": 0,
+            "features": {
+                "max_total_urls": TRIAL_MAX_URLS,
+                "max_daily_urls": trial_cfg.max_daily_urls,
+                "max_concurrent": trial_cfg.max_concurrent,
+                "batch_crawl": trial_cfg.batch_crawl,
+                "stealth_mode": trial_cfg.stealth_mode,
+                "proxy_quota_gb": trial_cfg.proxy_quota_gb,
+                "all_features_unlocked": True,
+            },
+        })
+
     for tier_key, tier_cfg in TIERS.items():
         for duration, price in PRICING[tier_key].items():
             result.append({

@@ -3,8 +3,47 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebHarvest - Trình cào dữ liệu & tải ảnh tự động chuyên nghiệp</title>
-    <meta name="description" content="Giải pháp cào dữ liệu website và tải ảnh hàng loạt hàng đầu Việt Nam. Tích hợp proxy xoay dân cư DataImpulse, hỗ trợ Google Sheets, Excel và bypass Cloudflare.">
+    <title data-i18n="meta_title">WebHarvest - Trình cào dữ liệu & tải ảnh tự động chuyên nghiệp</title>
+    <meta name="description" data-i18n-content="meta_description" content="Giải pháp cào dữ liệu website và tải ảnh hàng loạt hàng đầu Việt Nam. Tích hợp proxy xoay dân cư DataImpulse, hỗ trợ Google Sheets, Excel và bypass Cloudflare.">
+    <meta name="robots" content="index, follow">
+    <link rel="canonical" href="https://webharvest.twentypi.com/">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://webharvest.twentypi.com/">
+    <meta property="og:title" content="WebHarvest - Trình cào dữ liệu & tải ảnh tự động chuyên nghiệp">
+    <meta property="og:description" content="Giải pháp cào dữ liệu website và tải ảnh hàng loạt hàng đầu Việt Nam. Tích hợp proxy xoay dân cư DataImpulse, hỗ trợ Google Sheets, Excel và bypass Cloudflare.">
+    <meta property="og:image" content="https://webharvest.twentypi.com/logo_assets/social_banner.png">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="https://webharvest.twentypi.com/">
+    <meta property="twitter:title" content="WebHarvest - Trình cào dữ liệu & tải ảnh tự động chuyên nghiệp">
+    <meta property="twitter:description" content="Giải pháp cào dữ liệu website và tải ảnh hàng loạt hàng đầu Việt Nam. Tích hợp proxy xoay dân cư DataImpulse, hỗ trợ Google Sheets, Excel và bypass Cloudflare.">
+    <meta property="twitter:image" content="https://webharvest.twentypi.com/logo_assets/social_banner.png">
+
+    <!-- Structured Data JSON-LD -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "WebHarvest",
+      "operatingSystem": "Windows, macOS",
+      "applicationCategory": "BusinessApplication",
+      "aggregateRating": {
+        "@type": "AggregateRating",
+        "ratingValue": "4.8",
+        "ratingCount": "120"
+      },
+      "offers": {
+        "@type": "AggregateOffer",
+        "priceCurrency": "VND",
+        "lowPrice": "149000",
+        "highPrice": "14390400",
+        "offerCount": "12"
+      }
+    }
+    </script>
     
     <!-- Favicon -->
     <link rel="apple-touch-icon" sizes="180x180" href="/static/apple-touch-icon.png">
@@ -110,8 +149,17 @@
             letter-spacing: -0.02em;
         }
 
-        .logo i {
+        .logo i, .logo svg {
             color: var(--accent-purple);
+            stroke: var(--accent-purple);
+            width: 24px;
+            height: 24px;
+        }
+
+        .footer-logo svg {
+            width: 20px;
+            height: 20px;
+            stroke: var(--accent-purple);
         }
 
         .nav-links {
@@ -146,6 +194,36 @@
         .btn-download-nav:hover {
             transform: translateY(-2px);
             box-shadow: 0 6px 20px rgba(129, 140, 248, 0.5);
+        }
+
+        /* Language Switcher Dropdown Style */
+        .language-switcher-container {
+            display: inline-flex;
+            align-items: center;
+            margin-left: 12px;
+        }
+
+        .language-select {
+            background: rgba(0, 0, 0, 0.03);
+            border: 1px solid var(--apple-hairline);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-primary);
+            cursor: pointer;
+            outline: none;
+            transition: all 0.2s ease;
+        }
+
+        .language-select:hover {
+            background: rgba(0, 0, 0, 0.06);
+            border-color: rgba(0, 0, 0, 0.15);
+        }
+
+        .language-select option {
+            background: #ffffff;
+            color: #1d1d1f;
         }
 
         /* Hero Section */
@@ -607,7 +685,7 @@
         }
 
         .pricing-card.recommended::before {
-            content: 'PHỔ BIẾN NHẤT';
+            content: attr(data-badge);
             position: absolute;
             top: -12px;
             left: 50%;
@@ -963,30 +1041,42 @@
     <header>
         <div class="container nav-container">
             <a href="#" class="logo">
-                <i data-lucide="sprout"></i>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3" />
+                    <path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4" />
+                    <path d="M5 21h14" />
+                </svg>
                 <span>WebHarvest</span>
             </a>
-            <ul class="nav-links">
-                <li><a href="#features">Tính năng</a></li>
-                <li><a href="#simulator">Chạy thử</a></li>
-                <li><a href="#comparison">Bảng So Sánh</a></li>
-                <li><a href="#pricing">Bảng giá</a></li>
-                <li><a href="#download" class="btn-download-nav">Tải Setup</a></li>
-            </ul>
+            <div style="display: flex; align-items: center; gap: 20px;">
+                <ul class="nav-links">
+                    <li><a href="#features" data-i18n="nav_features">Tính năng</a></li>
+                    <li><a href="#simulator" data-i18n="nav_simulator">Chạy thử</a></li>
+                    <li><a href="#comparison" data-i18n="nav_comparison">Bảng So Sánh</a></li>
+                    <li><a href="#pricing" data-i18n="nav_pricing">Bảng giá</a></li>
+                    <li><a href="#download" class="btn-download-nav" data-i18n="nav_download">Tải Setup</a></li>
+                </ul>
+                <div class="language-switcher-container">
+                    <select id="language-select" class="language-select" onchange="changeLanguage(this.value)">
+                        <option value="vi">🇻🇳 VI</option>
+                        <option value="en">🇬🇧 EN</option>
+                    </select>
+                </div>
+            </div>
         </div>
     </header>
 
     <!-- Hero Section -->
     <section class="hero container">
         <div class="hero-badge">
-            <span>Trình cào dữ liệu chuyên sâu thế hệ mới</span>
+            <span data-i18n="hero_badge">Trình cào dữ liệu chuyên sâu thế hệ mới</span>
         </div>
-        <h1>Tự động cào thông tin & tải ảnh hàng loạt</h1>
-        <p class="subtitle">Giải pháp crawl dữ liệu tối tân hỗ trợ cào danh sách Excel, Google Sheets. Vượt qua cơ chế chống bot Cloudflare, tích hợp Proxy xoay dân cư từ DataImpulse và tự động hoá trích xuất dữ liệu.</p>
+        <h1 data-i18n="hero_title">Tự động cào thông tin & tải ảnh hàng loạt</h1>
+        <p class="subtitle" data-i18n="hero_subtitle">Giải pháp crawl dữ liệu tối tân hỗ trợ cào danh sách Excel, Google Sheets. Vượt qua cơ chế chống bot Cloudflare, tích hợp Proxy xoay dân cư từ DataImpulse và tự động hoá trích xuất dữ liệu.</p>
         
         <div class="hero-actions">
-            <a href="#pricing" class="btn btn-primary">Đăng Ký Bản Quyền</a>
-            <a href="#download" class="btn btn-secondary">Tải Bộ Setup Miễn Phí</a>
+            <a href="#pricing" class="btn btn-primary" data-i18n="btn_register_license">Đăng Ký Bản Quyền</a>
+            <a href="#download" class="btn btn-secondary" data-i18n="btn_download_free">Tải Bộ Setup Miễn Phí</a>
         </div>
 
         <!-- Interactive Simulator Card -->
@@ -1005,33 +1095,33 @@
                 <div class="sim-workspace">
                     <div class="sim-panel">
                         <div>
-                            <label for="sim-template">Chọn Website Mẫu</label>
+                            <label for="sim-template" data-i18n="sim_template_label">Chọn Website Mẫu</label>
                             <select id="sim-template" style="margin-top: 6px;" onchange="changeSimTemplate()">
-                                <option value="shopee">Trang sản phẩm Shopee (Dynamic JS)</option>
-                                <option value="pinterest">Pinterest Gallery (Stealth Chromium)</option>
-                                <option value="shopify">Shopify Catalog (Static Parser)</option>
+                                <option value="shopee" data-i18n="sim_option_shopee">Trang sản phẩm Shopee (Dynamic JS)</option>
+                                <option value="pinterest" data-i18n="sim_option_pinterest">Pinterest Gallery (Stealth Chromium)</option>
+                                <option value="shopify" data-i18n="sim_option_shopify">Shopify Catalog (Static Parser)</option>
                             </select>
                         </div>
                         <div>
-                            <label for="sim-url">Đường Dẫn URL Cần Cào</label>
+                            <label for="sim-url" data-i18n="sim_url_label">Đường Dẫn URL Cần Cào</label>
                             <input type="text" id="sim-url" style="margin-top: 6px;" value="https://shopee.vn/product-sample-detail-i.12039.4019">
                         </div>
                         <div>
-                            <label for="sim-fetcher">Chế Độ Fetcher</label>
+                            <label for="sim-fetcher" data-i18n="sim_fetcher_label">Chế Độ Fetcher</label>
                             <select id="sim-fetcher" style="margin-top: 6px;">
-                                <option value="auto">Auto-selection (Khuyên dùng)</option>
-                                <option value="stealth">Stealth Playwright (Bypass Firewall)</option>
-                                <option value="static">Static httpx (Tốc độ cao)</option>
+                                <option value="auto" data-i18n="sim_option_auto">Auto-selection (Khuyên dùng)</option>
+                                <option value="stealth" data-i18n="sim_option_stealth">Stealth Playwright (Bypass Firewall)</option>
+                                <option value="static" data-i18n="sim_option_static">Static httpx (Tốc độ cao)</option>
                             </select>
                         </div>
                         <button onclick="startSimulation()" class="btn btn-primary" style="padding: 10px; width: 100%; justify-content: center; font-size: 13px;">
-                            <i data-lucide="play" style="width: 14px;"></i> Bắt Đầu Chạy Thử
+                            <i data-lucide="play" style="width: 14px;"></i> <span data-i18n="sim_btn_start">Bắt Đầu Chạy Thử</span>
                         </button>
                     </div>
                     
                     <div class="sim-console" id="sim-console-screen">
                         <div class="sim-console-line info">[System] WebHarvest CLI Engine v1.0.0.</div>
-                        <div class="sim-console-line">[System] Sẵn sàng cào. Chọn website mẫu và ấn "Bắt Đầu Chạy Thử".</div>
+                        <div class="sim-console-line" id="sim-log-default-ready" data-i18n="sim_log_ready">[System] Sẵn sàng cào. Chọn website mẫu và ấn "Bắt Đầu Chạy Thử".</div>
                     </div>
                 </div>
             </div>
@@ -1041,14 +1131,14 @@
     <!-- Extractors Showcase Section -->
     <section class="showcase-section">
         <div class="container">
-            <p style="color: var(--text-secondary); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;">Hỗ trợ phân tích dữ liệu tự động các nền tảng phổ biến</p>
+            <p style="color: var(--text-secondary); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.1em;" data-i18n="showcase_title">Hỗ trợ phân tích dữ liệu tự động các nền tảng phổ biến</p>
             <div class="logo-cloud">
-                <div class="logo-cloud-item"><i data-lucide="shopping-cart"></i> Shopee Việt Nam</div>
-                <div class="logo-cloud-item"><i data-lucide="store"></i> Lazada Mall</div>
-                <div class="logo-cloud-item"><i data-lucide="image"></i> Pinterest Gallery</div>
-                <div class="logo-cloud-item"><i data-lucide="package"></i> Etsy Storefront</div>
-                <div class="logo-cloud-item"><i data-lucide="code"></i> Shopify System</div>
-                <div class="logo-cloud-item"><i data-lucide="file-spreadsheet"></i> Google Sheets / Excel</div>
+                <div class="logo-cloud-item"><i data-lucide="shopping-cart"></i> <span data-i18n="showcase_shopee">Shopee Việt Nam</span></div>
+                <div class="logo-cloud-item"><i data-lucide="store"></i> <span data-i18n="showcase_lazada">Lazada Mall</span></div>
+                <div class="logo-cloud-item"><i data-lucide="image"></i> <span data-i18n="showcase_pinterest">Pinterest Gallery</span></div>
+                <div class="logo-cloud-item"><i data-lucide="package"></i> <span data-i18n="showcase_etsy">Etsy Storefront</span></div>
+                <div class="logo-cloud-item"><i data-lucide="code"></i> <span data-i18n="showcase_shopify">Shopify System</span></div>
+                <div class="logo-cloud-item"><i data-lucide="file-spreadsheet"></i> <span data-i18n="showcase_sheets_excel">Google Sheets / Excel</span></div>
             </div>
         </div>
     </section>
@@ -1056,25 +1146,25 @@
     <!-- How It Works Section -->
     <section class="steps-section container">
         <div class="section-header">
-            <h2>Quy trình hoạt động 3 bước đơn giản</h2>
-            <p>Không cần biết lập trình, cào trích xuất hàng triệu dữ liệu chỉ với vài bước trực quan.</p>
+            <h2 data-i18n="steps_title">Quy trình hoạt động 3 bước đơn giản</h2>
+            <p data-i18n="steps_subtitle">Không cần biết lập trình, cào trích xuất hàng triệu dữ liệu chỉ với vài bước trực quan.</p>
         </div>
         
         <div class="steps-grid">
             <div class="step-card">
                 <div class="step-number">01</div>
-                <h3>Tải và Cài Đặt Setup</h3>
-                <p>Tải xuống ứng dụng WebHarvest cho Windows/macOS. Ứng dụng chạy trực tiếp không cần cài đặt Python hay môi trường phức tạp.</p>
+                <h3 data-i18n="step1_title">Tải và Cài Đặt Setup</h3>
+                <p data-i18n="step1_desc">Tải xuống ứng dụng WebHarvest cho Windows/macOS. Ứng dụng chạy trực tiếp không cần cài đặt Python hay môi trường phức tạp.</p>
             </div>
             <div class="step-card">
                 <div class="step-number">02</div>
-                <h3>Cấu Hình Link Hoặc Tệp</h3>
-                <p>Nhập địa chỉ website cần cào hoặc tải lên file Excel/Google Sheets chứa hàng loạt đường dẫn. Chọn định dạng ảnh mong muốn.</p>
+                <h3 data-i18n="step2_title">Cấu Hình Link Hoặc Tệp</h3>
+                <p data-i18n="step2_desc">Nhập địa chỉ website cần cào hoặc tải lên file Excel/Google Sheets chứa hàng loạt đường dẫn. Chọn định dạng ảnh mong muốn.</p>
             </div>
             <div class="step-card">
                 <div class="step-number">03</div>
-                <h3>Nhận Kết Quả Tải Về</h3>
-                <p>Ứng dụng tự động cào, tải ảnh chất lượng cao vào các thư mục riêng biệt, và tạo file Excel chứa thông tin đầy đủ cấu trúc.</p>
+                <h3 data-i18n="step3_title">Nhận Kết Quả Tải Về</h3>
+                <p data-i18n="step3_desc">Ứng dụng tự động cào, tải ảnh chất lượng cao vào các thư mục riêng biệt, và tạo file Excel chứa thông tin đầy đủ cấu trúc.</p>
             </div>
         </div>
     </section>
@@ -1082,40 +1172,40 @@
     <!-- Core Features Details -->
     <section id="features" class="features container">
         <div class="section-header">
-            <h2>Tính năng ưu việt, thiết kế tối ưu</h2>
-            <p>Hệ thống lõi cào dữ liệu tối tân vượt trội hơn mọi giải pháp cào dữ liệu thông thường.</p>
+            <h2 data-i18n="features_title">Tính năng ưu việt, thiết kế tối ưu</h2>
+            <p data-i18n="features_subtitle">Hệ thống lõi cào dữ liệu tối tân vượt trội hơn mọi giải pháp cào dữ liệu thông thường.</p>
         </div>
 
         <div class="features-grid">
             <div class="feature-card">
                 <div class="feature-icon"><i data-lucide="shield-alert"></i></div>
-                <h3>Vượt Qua Cloudflare</h3>
-                <p>Bộ cào ẩn danh cao cấp giả lập đầy đủ vân tay trình duyệt, vượt qua các hệ thống phát hiện bot của Cloudflare và chống cào dữ liệu.</p>
+                <h3 data-i18n="feature_cloudflare_title">Vượt Qua Cloudflare</h3>
+                <p data-i18n="feature_cloudflare_desc">Bộ cào ẩn danh cao cấp giả lập đầy đủ vân tay trình duyệt, vượt qua các hệ thống phát hiện bot của Cloudflare và chống cào dữ liệu.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i data-lucide="globe-2"></i></div>
-                <h3>Proxy Dân Cư DataImpulse</h3>
-                <p>Kết nối trực tiếp thông qua bể Proxy xoay dân cư sạch của nhà cung cấp DataImpulse. Địa chỉ IP được thay đổi liên tục.</p>
+                <h3 data-i18n="feature_proxy_title">Proxy Dân Cư DataImpulse</h3>
+                <p data-i18n="feature_proxy_desc">Kết nối trực tiếp thông qua bể Proxy xoay dân cư sạch của nhà cung cấp DataImpulse. Địa chỉ IP được thay đổi liên tục.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i data-lucide="server"></i></div>
-                <h3>Tự Động Fallback IP Local</h3>
-                <p>Trong trường hợp băng thông Proxy hết hạn hoặc lỗi kết nối, hệ thống tự động chuyển sang IP Local để cào dữ liệu không bị ngắt quãng.</p>
+                <h3 data-i18n="feature_fallback_title">Tự Động Fallback IP Local</h3>
+                <p data-i18n="feature_fallback_desc">Trong trường hợp băng thông Proxy hết hạn hoặc lỗi kết nối, hệ thống tự động chuyển sang IP Local để cào dữ liệu không bị ngắt quãng.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i data-lucide="link"></i></div>
-                <h3>Device Binding (SHA256)</h3>
-                <p>Quản lý kích hoạt bản quyền an toàn, mã hóa thông tin phần cứng máy tính bằng mã SHA256. Có nút Hủy kích hoạt để đổi máy tự do.</p>
+                <h3 data-i18n="feature_binding_title">Device Binding (SHA256)</h3>
+                <p data-i18n="feature_binding_desc">Quản lý kích hoạt bản quyền an toàn, mã hóa thông tin phần cứng máy tính bằng mã SHA256. Có nút Hủy kích hoạt để đổi máy tự do.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i data-lucide="refresh-cw"></i></div>
-                <h3>Tự Động Tránh Trùng Lặp</h3>
-                <p>Kiểm tra trùng lặp thông minh dựa trên tên tệp và hash nội dung. Tiết kiệm băng thông tối đa, không bao giờ tải lại ảnh cũ.</p>
+                <h3 data-i18n="feature_dedup_title">Tự Động Tránh Trùng Lặp</h3>
+                <p data-i18n="feature_dedup_desc">Kiểm tra trùng lặp thông minh dựa trên tên tệp và hash nội dung. Tiết kiệm băng thông tối đa, không bao giờ tải lại ảnh cũ.</p>
             </div>
             <div class="feature-card">
                 <div class="feature-icon"><i data-lucide="zap"></i></div>
-                <h3>Tốc Độ Crawl Siêu Tốc</h3>
-                <p>Công nghệ lập trình bất tuần tự (async/await) giúp cào đồng thời hàng chục luồng dữ liệu, nâng cao năng suất gấp 5 lần.</p>
+                <h3 data-i18n="feature_speed_title">Tốc Độ Crawl Siêu Tốc</h3>
+                <p data-i18n="feature_speed_desc">Công nghệ lập trình bất tuần tự (async/await) giúp cào đồng thời hàng chục luồng dữ liệu, nâng cao năng suất gấp 5 lần.</p>
             </div>
         </div>
     </section>
@@ -1123,86 +1213,86 @@
     <!-- Comparison Matrix Section -->
     <section id="comparison" class="comparison-section container">
         <div class="section-header">
-            <h2>So sánh chi tiết các gói bản quyền</h2>
-            <p>Chi tiết các thông số kỹ thuật và hạn mức tài nguyên của từng gói dịch vụ.</p>
+            <h2 data-i18n="compare_title">So sánh chi tiết các gói bản quyền</h2>
+            <p data-i18n="compare_subtitle">Chi tiết các thông số kỹ thuật và hạn mức tài nguyên của từng gói dịch vụ.</p>
         </div>
 
         <div class="table-wrapper">
             <table>
                 <thead>
                     <tr>
-                        <th>Tính Năng So Sánh</th>
-                        <th>Gói Basic</th>
-                        <th>Gói Pro (Khuyên Dùng)</th>
-                        <th>Gói Unlimited</th>
+                        <th data-i18n="compare_header_feature">Tính Năng So Sánh</th>
+                        <th data-i18n="compare_header_basic">Gói Basic</th>
+                        <th data-i18n="compare_header_pro">Gói Pro (Khuyên Dùng)</th>
+                        <th data-i18n="compare_header_unlimited">Gói Unlimited</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr>
-                        <td><strong>Hạn mức URLs cào / ngày</strong></td>
-                        <td>50 URLs</td>
-                        <td>500 URLs</td>
-                        <td>Không giới hạn</td>
+                        <td><strong data-i18n="compare_row_urls_limit">Hạn mức URLs cào / ngày</strong></td>
+                        <td data-i18n="compare_val_50_urls">50 URLs</td>
+                        <td data-i18n="compare_val_500_urls">500 URLs</td>
+                        <td data-i18n="compare_val_unlimited">Không giới hạn</td>
                     </tr>
                     <tr>
-                        <td><strong>Số luồng cào đồng thời</strong></td>
-                        <td>1 luồng</td>
-                        <td>5 luồng</td>
-                        <td>20 luồng</td>
+                        <td><strong data-i18n="compare_row_threads_limit">Số luồng cào đồng thời</strong></td>
+                        <td data-i18n="compare_val_1_thread">1 luồng</td>
+                        <td data-i18n="compare_val_5_threads">5 luồng</td>
+                        <td data-i18n="compare_val_20_threads">20 luồng</td>
                     </tr>
                     <tr>
-                        <td><strong>Dung lượng Proxy DataImpulse / tháng</strong></td>
-                        <td>1.0 GB</td>
-                        <td>10.0 GB</td>
-                        <td>50.0 GB</td>
+                        <td><strong data-i18n="compare_row_proxy_limit">Dung lượng Proxy DataImpulse / tháng</strong></td>
+                        <td data-i18n="compare_val_1gb">1.0 GB</td>
+                        <td data-i18n="compare_val_10gb">10.0 GB</td>
+                        <td data-i18n="compare_val_50gb">50.0 GB</td>
                     </tr>
                     <tr>
-                        <td><strong>Bộ cào Tĩnh (Static Parser)</strong></td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                        <td><strong data-i18n="compare_row_static_parser">Bộ cào Tĩnh (Static Parser)</strong></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_supported">Có hỗ trợ</span></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_supported">Có hỗ trợ</span></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_supported">Có hỗ trợ</span></td>
                     </tr>
                     <tr>
-                        <td><strong>Bộ cào Động (Playwright JS)</strong></td>
-                        <td class="matrix-no"><i data-lucide="x"></i> Không</td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                        <td><strong data-i18n="compare_row_dynamic_parser">Bộ cào Động (Playwright JS)</strong></td>
+                        <td class="matrix-no"><i data-lucide="x"></i> <span data-i18n="compare_val_no">Không</span></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_supported">Có hỗ trợ</span></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_supported">Có hỗ trợ</span></td>
                     </tr>
                     <tr>
-                        <td><strong>Bộ cào Ẩn Danh (Stealth Mode)</strong></td>
-                        <td class="matrix-no"><i data-lucide="x"></i> Không</td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                        <td><strong data-i18n="compare_row_stealth_mode">Bộ cào Ẩn Danh (Stealth Mode)</strong></td>
+                        <td class="matrix-no"><i data-lucide="x"></i> <span data-i18n="compare_val_no">Không</span></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_supported">Có hỗ trợ</span></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_supported">Có hỗ trợ</span></td>
                     </tr>
                     <tr>
-                        <td><strong>Cào hàng loạt (Excel/Sheets/CSV)</strong></td>
-                        <td class="matrix-no"><i data-lucide="x"></i> Không</td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                        <td><strong data-i18n="compare_row_batch_scraping">Cào hàng loạt (Excel/Sheets/CSV)</strong></td>
+                        <td class="matrix-no"><i data-lucide="x"></i> <span data-i18n="compare_val_no">Không</span></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_supported">Có hỗ trợ</span></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_supported">Có hỗ trợ</span></td>
                     </tr>
                     <tr>
-                        <td><strong>Giới hạn thiết bị kích hoạt (Device Binding)</strong></td>
-                        <td>1 thiết bị</td>
-                        <td>1 thiết bị</td>
-                        <td>1 thiết bị</td>
+                        <td><strong data-i18n="compare_row_device_binding">Giới hạn thiết bị kích hoạt (Device Binding)</strong></td>
+                        <td data-i18n="compare_val_1_device">1 thiết bị</td>
+                        <td data-i18n="compare_val_1_device">1 thiết bị</td>
+                        <td data-i18n="compare_val_1_device">1 thiết bị</td>
                     </tr>
                     <tr>
-                        <td><strong>Nút Hủy kích hoạt đổi máy tự động</strong></td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có (Tối đa 2 lần)</td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có (Tối đa 2 lần)</td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có (Tối đa 2 lần)</td>
+                        <td><strong data-i18n="compare_row_unbind_button">Nút Hủy kích hoạt đổi máy tự động</strong></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_max_2">Có (Tối đa 2 lần)</span></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_max_2">Có (Tối đa 2 lần)</span></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_max_2">Có (Tối đa 2 lần)</span></td>
                     </tr>
                     <tr>
-                        <td><strong>Tự động Fallback IP Local</strong></td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
-                        <td class="matrix-yes"><i data-lucide="check"></i> Có hỗ trợ</td>
+                        <td><strong data-i18n="compare_row_fallback_ip">Tự động Fallback IP Local</strong></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_supported">Có hỗ trợ</span></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_supported">Có hỗ trợ</span></td>
+                        <td class="matrix-yes"><i data-lucide="check"></i> <span data-i18n="compare_val_yes_supported">Có hỗ trợ</span></td>
                     </tr>
                     <tr>
-                        <td><strong>Hỗ trợ kỹ thuật</strong></td>
-                        <td>Qua Email</td>
-                        <td class="matrix-yes">Ưu tiên qua Zalo/UltraViewer</td>
-                        <td class="matrix-yes">Kỹ sư hỗ trợ 24/7 riêng biệt</td>
+                        <td><strong data-i18n="compare_row_tech_support">Hỗ trợ kỹ thuật</strong></td>
+                        <td data-i18n="compare_val_support_email">Qua Email</td>
+                        <td class="matrix-yes" data-i18n="compare_val_support_zalo">Ưu tiên qua Zalo/UltraViewer</td>
+                        <td class="matrix-yes" data-i18n="compare_val_support_engineer">Kỹ sư hỗ trợ 24/7 riêng biệt</td>
                     </tr>
                 </tbody>
             </table>
@@ -1212,86 +1302,86 @@
     <!-- Pricing Section -->
     <section id="pricing" class="pricing container">
         <div class="section-header">
-            <h2>Bảng giá gói đăng ký</h2>
-            <p>Chọn gói bản quyền phù hợp để mở khóa sức mạnh cào dữ liệu của bạn.</p>
+            <h2 data-i18n="pricing_title">Bảng giá gói đăng ký</h2>
+            <p data-i18n="pricing_subtitle">Chọn gói bản quyền phù hợp để mở khóa sức mạnh cào dữ liệu của bạn.</p>
         </div>
 
         <!-- Duration Picker -->
         <div class="duration-selector">
-            <button class="duration-btn active" onclick="setDuration(1)">1 Tháng</button>
-            <button class="duration-btn" onclick="setDuration(3)">3 Tháng (-10%)</button>
-            <button class="duration-btn" onclick="setDuration(6)">6 Tháng (-15%)</button>
-            <button class="duration-btn" onclick="setDuration(12)">1 Năm (-20%)</button>
+            <button class="duration-btn active" onclick="setDuration(1)" data-i18n="duration_1_month">1 Tháng</button>
+            <button class="duration-btn" onclick="setDuration(3)" data-i18n="duration_3_months">3 Tháng (-10%)</button>
+            <button class="duration-btn" onclick="setDuration(6)" data-i18n="duration_6_months">6 Tháng (-15%)</button>
+            <button class="duration-btn" onclick="setDuration(12)" data-i18n="duration_12_months">1 Năm (-20%)</button>
         </div>
 
         <div class="pricing-grid">
             <!-- Basic Plan -->
             <div class="pricing-card">
                 <div class="plan-header">
-                    <div class="plan-title">⚡ Basic</div>
-                    <p style="color: var(--text-secondary); font-size: 13px;">Dành cho nhu cầu nghiên cứu & cào dữ liệu nhỏ</p>
+                    <div class="plan-title" data-i18n="plan_basic_title">⚡ Basic</div>
+                    <p style="color: var(--text-secondary); font-size: 13px;" data-i18n="plan_basic_desc">Dành cho nhu cầu nghiên cứu & cào dữ liệu nhỏ</p>
                     <div class="plan-price-box">
                         <span class="plan-price" id="price-basic">149,000đ</span>
-                        <span class="plan-period">/ chu kỳ</span>
+                        <span class="plan-period" data-i18n="plan_period">/ chu kỳ</span>
                     </div>
                     <div class="plan-price-discounted" id="discount-basic"></div>
                 </div>
                 <ul class="plan-features-list">
-                    <li><i data-lucide="check" style="width: 16px;"></i> 50 URLs cào mỗi ngày</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> 1 Luồng cào đồng thời</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> Bộ cào Tĩnh & Tự động</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> 1 GB Băng thông Proxy DataImpulse</li>
-                    <li class="disabled"><i data-lucide="x" style="width: 16px;"></i> Hỗ trợ cào hàng loạt (Excel/Sheets)</li>
-                    <li class="disabled"><i data-lucide="x" style="width: 16px;"></i> Bộ cào Ẩn danh (Stealth Playwright)</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> Hỗ trợ Fallback IP Local tự động</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_urls_50">50 URLs cào mỗi ngày</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_threads_1">1 Luồng cào đồng thời</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_static_auto">Bộ cào Tĩnh & Tự động</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_proxy_1gb">1 GB Băng thông Proxy DataImpulse</span></li>
+                    <li class="disabled"><i data-lucide="x" style="width: 16px;"></i> <span data-i18n="plan_feature_batch">Hỗ trợ cào hàng loạt (Excel/Sheets)</span></li>
+                    <li class="disabled"><i data-lucide="x" style="width: 16px;"></i> <span data-i18n="plan_feature_stealth">Bộ cào Ẩn danh (Stealth Playwright)</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_fallback">Hỗ trợ Fallback IP Local tự động</span></li>
                 </ul>
-                <button onclick="openCheckout('basic')" class="btn btn-secondary btn-buy">Mua gói ngay</button>
+                <button onclick="openCheckout('basic')" class="btn btn-secondary btn-buy" data-i18n="btn_buy_now">Mua gói ngay</button>
             </div>
 
             <!-- Pro Plan -->
-            <div class="pricing-card recommended">
+            <div class="pricing-card recommended" data-badge="PHỔ BIẾN NHẤT" data-i18n-badge="popular_badge">
                 <div class="plan-header">
-                    <div class="plan-title">⭐ Pro</div>
-                    <p style="color: var(--text-secondary); font-size: 13px;">Gói phổ biến nhất cho người làm Marketing & MMO</p>
+                    <div class="plan-title" data-i18n="plan_pro_title">⭐ Pro</div>
+                    <p style="color: var(--text-secondary); font-size: 13px;" data-i18n="plan_pro_desc">Gói phổ biến nhất cho người làm Marketing & MMO</p>
                     <div class="plan-price-box">
                         <span class="plan-price" id="price-pro">699,000đ</span>
-                        <span class="plan-period">/ chu kỳ</span>
+                        <span class="plan-period" data-i18n="plan_period">/ chu kỳ</span>
                     </div>
                     <div class="plan-price-discounted" id="discount-pro"></div>
                 </div>
                 <ul class="plan-features-list">
-                    <li><i data-lucide="check" style="width: 16px;"></i> 500 URLs cào mỗi ngày</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> 5 Luồng cào đồng thời</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> Tất cả Fetcher (Tĩnh, Động, Ẩn danh)</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> 10 GB Băng thông Proxy DataImpulse</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> Nhập tệp Excel/Google Sheets hàng loạt</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> Trích xuất cấu trúc Catalog sản phẩm</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> Hỗ trợ kĩ thuật ưu tiên Zalo</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_urls_500">500 URLs cào mỗi ngày</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_threads_5">5 Luồng cào đồng thời</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_all_fetchers">Tất cả Fetcher (Tĩnh, Động, Ẩn danh)</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_proxy_10gb">10 GB Băng thông Proxy DataImpulse</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_batch_import">Nhập tệp Excel/Google Sheets hàng loạt</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_catalog_extract">Trích xuất cấu trúc Catalog sản phẩm</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_zalo_support">Hỗ trợ kĩ thuật ưu tiên Zalo</span></li>
                 </ul>
-                <button onclick="openCheckout('pro')" class="btn btn-primary btn-buy">Mua gói ngay</button>
+                <button onclick="openCheckout('pro')" class="btn btn-primary btn-buy" data-i18n="btn_buy_now">Mua gói ngay</button>
             </div>
 
             <!-- Unlimited Plan -->
             <div class="pricing-card">
                 <div class="plan-header">
-                    <div class="plan-title">💎 Unlimited</div>
-                    <p style="color: var(--text-secondary); font-size: 13px;">Dành cho các doanh nghiệp, quy mô khai thác lớn</p>
+                    <div class="plan-title" data-i18n="plan_unlimited_title">💎 Unlimited</div>
+                    <p style="color: var(--text-secondary); font-size: 13px;" data-i18n="plan_unlimited_desc">Dành cho các doanh nghiệp, quy mô khai thác lớn</p>
                     <div class="plan-price-box">
                         <span class="plan-price" id="price-unlimited">1,499,000đ</span>
-                        <span class="plan-period">/ chu kỳ</span>
+                        <span class="plan-period" data-i18n="plan_period">/ chu kỳ</span>
                     </div>
                     <div class="plan-price-discounted" id="discount-unlimited"></div>
                 </div>
                 <ul class="plan-features-list">
-                    <li><i data-lucide="check" style="width: 16px;"></i> Không giới hạn URLs cào hàng ngày</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> 20 Luồng cào đồng thời</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> Đầy đủ tính năng cao cấp nhất</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> 50 GB Băng thông Proxy DataImpulse</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> Cào hàng loạt không giới hạn tệp</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> Tự động phân loại dữ liệu theo nhóm</li>
-                    <li><i data-lucide="check" style="width: 16px;"></i> Hỗ trợ riêng biệt UltraViewer 24/7</li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_urls_unlimited">Không giới hạn URLs cào hàng ngày</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_threads_20">20 Luồng cào đồng thời</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_all_premium">Đầy đủ tính năng cao cấp nhất</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_proxy_50gb">50 GB Băng thông Proxy DataImpulse</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_batch_unlimited">Cào hàng loạt không giới hạn tệp</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_auto_classify">Tự động phân loại dữ liệu theo nhóm</span></li>
+                    <li><i data-lucide="check" style="width: 16px;"></i> <span data-i18n="plan_feature_support_24_7">Hỗ trợ riêng biệt UltraViewer 24/7</span></li>
                 </ul>
-                <button onclick="openCheckout('unlimited')" class="btn btn-secondary btn-buy">Mua gói ngay</button>
+                <button onclick="openCheckout('unlimited')" class="btn btn-secondary btn-buy" data-i18n="btn_buy_now">Mua gói ngay</button>
             </div>
         </div>
     </section>
@@ -1299,44 +1389,44 @@
     <!-- FAQ Section -->
     <section class="faq-section container">
         <div class="section-header">
-            <h2>Câu hỏi thường gặp (FAQ)</h2>
-            <p>Giải đáp các thắc mắc về quá trình sử dụng bản quyền, proxy và cài đặt.</p>
+            <h2 data-i18n="faq_title">Câu hỏi thường gặp (FAQ)</h2>
+            <p data-i18n="faq_subtitle">Giải đáp các thắc mắc về quá trình sử dụng bản quyền, proxy và cài đặt.</p>
         </div>
 
         <div class="faq-grid">
             <div class="faq-item">
                 <div class="faq-header" onclick="toggleFaq(event)">
-                    <h3>Tôi có thể chuyển đổi License Key sang máy khác sử dụng không?</h3>
+                    <h3 data-i18n="faq_q1">Tôi có thể chuyển đổi License Key sang máy khác sử dụng không?</h3>
                     <i data-lucide="chevron-down" class="faq-icon"></i>
                 </div>
-                <div class="faq-body">
+                <div class="faq-body" data-i18n="faq_a1">
                     Có. Trình cào dữ liệu WebHarvest hỗ trợ cơ chế unbinding tự động. Tại giao diện Cài đặt trên ứng dụng Desktop, bạn chỉ cần click nút "Hủy Kích Hoạt Thiết Bị". Hệ thống sẽ giải phóng key của bạn khỏi phần cứng máy hiện tại và cho phép bạn kích hoạt trên máy mới (Mỗi Key hỗ trợ unbind tối đa 2 lần trước khi cần admin hỗ trợ reset).
                 </div>
             </div>
             <div class="faq-item">
                 <div class="faq-header" onclick="toggleFaq(event)">
-                    <h3>Dung lượng Proxy DataImpulse tính phí thế nào?</h3>
+                    <h3 data-i18n="faq_q2">Dung lượng Proxy DataImpulse tính phí thế nào?</h3>
                     <i data-lucide="chevron-down" class="faq-icon"></i>
                 </div>
-                <div class="faq-body">
+                <div class="faq-body" data-i18n="faq_a2">
                     Mỗi gói bản quyền được tặng kèm dung lượng băng thông Proxy xoay dân cư tốc độ cao định kỳ hàng tháng (Basic: 1GB, Pro: 10GB, Unlimited: 50GB). Băng thông này chỉ bị trừ khi bạn tiến hành cào dữ liệu qua hệ thống Proxy. Nếu hết băng thông, hệ thống sẽ tự động chuyển sang IP Local (IP nhà của bạn) để đảm bảo không bị dừng chương trình.
                 </div>
             </div>
             <div class="faq-item">
                 <div class="faq-header" onclick="toggleFaq(event)">
-                    <h3>Tại sao tôi nên chọn cào bằng Stealth Mode?</h3>
+                    <h3 data-i18n="faq_q3">Tại sao tôi nên chọn cào bằng Stealth Mode?</h3>
                     <i data-lucide="chevron-down" class="faq-icon"></i>
                 </div>
-                <div class="faq-body">
+                <div class="faq-body" data-i18n="faq_a3">
                     Chế độ Stealth Mode khởi chạy trình duyệt Chromium đã được tối ưu hóa đặc biệt nhằm vượt qua các thuật toán chống bot nâng cao (như Cloudflare Challenge, Akamai, Datadome). Khi trang web bạn cào chặn các truy cập thông thường, Stealth Mode kết hợp cùng Proxy xoay dân cư sẽ là giải pháp cào an toàn nhất.
                 </div>
             </div>
             <div class="faq-item">
                 <div class="faq-header" onclick="toggleFaq(event)">
-                    <h3>Tôi có nhận được License Key ngay lập tức sau khi thanh toán không?</h3>
+                    <h3 data-i18n="faq_q4">Tôi có nhận được License Key ngay lập tức sau khi thanh toán không?</h3>
                     <i data-lucide="chevron-down" class="faq-icon"></i>
                 </div>
-                <div class="faq-body">
+                <div class="faq-body" data-i18n="faq_a4">
                     Có. Ngay khi bạn chuyển khoản thành công bằng mã QR qua cổng PayOS, Webhook của hệ thống sẽ tự động ghi nhận giao dịch, sinh mã License Key và gửi thông báo trực tiếp qua địa chỉ Email bạn đã đăng ký. Đồng thời, trang kết quả thanh toán trên trình duyệt của bạn sẽ tự động hiển thị License Key để bạn sao chép ngay.
                 </div>
             </div>
@@ -1346,21 +1436,21 @@
     <!-- Download Section -->
     <section id="download" class="download-section">
         <div class="container">
-            <h2>Tải ứng dụng WebHarvest Desktop</h2>
-            <p style="color: var(--text-secondary); max-width: 600px; margin: 16px auto 0;">Tương thích hoàn toàn với các hệ điều hành phổ biến nhất. Tải về và chạy ngay.</p>
+            <h2 data-i18n="download_title">Tải ứng dụng WebHarvest Desktop</h2>
+            <p style="color: var(--text-secondary); max-width: 600px; margin: 16px auto 0;" data-i18n="download_subtitle">Tương thích hoàn toàn với các hệ điều hành phổ biến nhất. Tải về và chạy ngay.</p>
             
             <div class="download-cards">
                 <div class="download-card">
                     <i data-lucide="monitor"></i>
-                    <h3>Windows</h3>
-                    <p>Yêu cầu Windows 10/11 x64</p>
-                    <a href="/download/win" class="btn btn-primary" style="margin-top: 12px; width: 100%; justify-content: center;">Tải Setup (.exe)</a>
+                    <h3 data-i18n="download_win_title">Windows</h3>
+                    <p data-i18n="download_win_desc">Yêu cầu Windows 10/11 x64</p>
+                    <a href="/download/win" class="btn btn-primary" style="margin-top: 12px; width: 100%; justify-content: center;" data-i18n="btn_download_win">Tải Setup (.exe)</a>
                 </div>
                 <div class="download-card">
                     <i data-lucide="laptop"></i>
-                    <h3>macOS</h3>
-                    <p>Intel & Apple Silicon (M1/M2/M3)</p>
-                    <a href="/download/mac" class="btn btn-secondary" style="margin-top: 12px; width: 100%; justify-content: center;">Tải Disk Image (.dmg)</a>
+                    <h3 data-i18n="download_mac_title">macOS</h3>
+                    <p data-i18n="download_mac_desc">Intel & Apple Silicon (M1/M2/M3)</p>
+                    <a href="/download/mac" class="btn btn-secondary" style="margin-top: 12px; width: 100%; justify-content: center;" data-i18n="btn_download_mac">Tải Disk Image (.dmg)</a>
                 </div>
             </div>
         </div>
@@ -1371,31 +1461,31 @@
         <div class="modal-card">
             <button class="close-modal" onclick="closeCheckout()">&times;</button>
             <div class="modal-header">
-                <h3 id="modal-plan-title">Thanh toán</h3>
-                <p>Nhập thông tin nhận License Key bản quyền</p>
+                <h3 id="modal-plan-title" data-i18n="modal_checkout_title">Thanh toán</h3>
+                <p data-i18n="modal_checkout_desc">Nhập thông tin nhận License Key bản quyền</p>
             </div>
             
             <div id="checkout-error" class="checkout-error"></div>
 
             <form id="checkout-form" onsubmit="submitCheckout(event)">
                 <div class="form-group">
-                    <label for="buyer-name">Họ và tên</label>
-                    <input type="text" id="buyer-name" placeholder="Nguyễn Văn A" required>
+                    <label for="buyer-name" data-i18n="form_name_label">Họ và tên</label>
+                    <input type="text" id="buyer-name" data-i18n-placeholder="form_name_placeholder" placeholder="Nguyễn Văn A" required>
                 </div>
                 <div class="form-group">
-                    <label for="buyer-email">Địa chỉ Email</label>
-                    <input type="email" id="buyer-email" placeholder="email@example.com" required>
-                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: 6px;">* Vui lòng nhập đúng Email để nhận key bản quyền tự động.</p>
+                    <label for="buyer-email" data-i18n="form_email_label">Địa chỉ Email</label>
+                    <input type="email" id="buyer-email" data-i18n-placeholder="form_email_placeholder" placeholder="email@example.com" required>
+                    <p style="font-size: 11px; color: var(--text-secondary); margin-top: 6px;" data-i18n="form_email_hint">* Vui lòng nhập đúng Email để nhận key bản quyền tự động.</p>
                 </div>
                 
                 <div class="checkout-summary">
-                    <span class="summary-label" id="summary-duration">Chu kỳ: 1 tháng</span>
+                    <span class="summary-label" id="summary-duration" data-i18n="js_billing_cycle">Chu kỳ: 1 tháng</span>
                     <span class="summary-value" id="summary-price">149,000đ</span>
                 </div>
 
                 <button type="submit" id="btn-submit-payment" class="btn btn-primary" style="width: 100%; justify-content: center;">
                     <i data-lucide="credit-card"></i>
-                    <span>Thanh toán qua cổng PayOS</span>
+                    <span data-i18n="btn_pay_payos">Thanh toán qua cổng PayOS</span>
                 </button>
             </form>
         </div>
@@ -1405,21 +1495,34 @@
     <footer>
         <div class="container">
             <a href="#" class="footer-logo">
-                <i data-lucide="sprout"></i>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 9.536V7a4 4 0 0 1 4-4h1.5a.5.5 0 0 1 .5.5V5a4 4 0 0 1-4 4 4 4 0 0 0-4 4c0 2 1 3 1 5a5 5 0 0 1-1 3" />
+                    <path d="M4 9a5 5 0 0 1 8 4 5 5 0 0 1-8-4" />
+                    <path d="M5 21h14" />
+                </svg>
                 <span>WebHarvest</span>
             </a>
-            <p>© 2026 WebHarvest Inc. Bản quyền được bảo lưu.</p>
+            <p data-i18n="footer_copyright">© 2026 WebHarvest Inc. Bản quyền được bảo lưu.</p>
         </div>
     </footer>
 
+    <script src="/static/translations_marketing.js"></script>
     <!-- Logic Script -->
     <script>
-        // Pricing matrix from python config
-        const pricingMatrix = {
+        // Pricing matrix from python config (VND and USD)
+        const pricingMatrixVND = {
             basic: { 1: 149000, 3: 402300, 6: 759900, 12: 1430400 },
             pro: { 1: 699000, 3: 1887300, 6: 3564900, 12: 6710400 },
             unlimited: { 1: 1499000, 3: 4047300, 6: 7649900, 12: 14390400 }
         };
+
+        const pricingMatrixUSD = {
+            basic: { 1: 6, 3: 16.5, 6: 31, 12: 58 },
+            pro: { 1: 29, 3: 78, 6: 147, 12: 277 },
+            unlimited: { 1: 62, 3: 167, 6: 315, 12: 593 }
+        };
+
+        const pricingMatrix = pricingMatrixVND; // default backend mapping config placeholder
 
         const tierNames = {
             basic: '⚡ Basic Plan',
@@ -1430,7 +1533,10 @@
         let currentDuration = 1;
         let selectedTier = 'pro';
 
-        function formatVND(amount) {
+        function formatPrice(amount) {
+            if (currentLang === 'en') {
+                return '$' + amount.toLocaleString('en-US');
+            }
             return amount.toLocaleString('vi-VN') + 'đ';
         }
 
@@ -1443,17 +1549,18 @@
         }
 
         function updatePricingDisplay() {
-            Object.keys(pricingMatrix).forEach(tier => {
-                const totalAmount = pricingMatrix[tier][currentDuration];
+            const matrix = currentLang === 'en' ? pricingMatrixUSD : pricingMatrixVND;
+            Object.keys(matrix).forEach(tier => {
+                const totalAmount = matrix[tier][currentDuration];
                 const priceEl = document.getElementById(`price-${tier}`);
                 const discountEl = document.getElementById(`discount-${tier}`);
 
-                if (priceEl) priceEl.textContent = formatVND(totalAmount);
+                if (priceEl) priceEl.textContent = formatPrice(totalAmount);
 
                 if (discountEl) {
                     if (currentDuration > 1) {
-                        const monthlyEquivalent = Math.round(totalAmount / currentDuration);
-                        discountEl.textContent = `Tương đương ${formatVND(monthlyEquivalent)}/tháng`;
+                        const monthlyEquivalent = Math.round(totalAmount / currentDuration * 10) / 10;
+                        discountEl.textContent = t('js_price_equivalent', { price: formatPrice(monthlyEquivalent) });
                     } else {
                         discountEl.textContent = '';
                     }
@@ -1468,13 +1575,19 @@
             const summaryDurationEl = document.getElementById('summary-duration');
             const summaryPriceEl = document.getElementById('summary-price');
             
-            if (planTitleEl) planTitleEl.textContent = `Đăng ký ${tierNames[tier]}`;
+            if (planTitleEl) planTitleEl.textContent = `${t('modal_checkout_title')} ${tierNames[tier]}`;
             
-            const durationLabel = currentDuration === 12 ? '1 năm' : `${currentDuration} tháng`;
-            if (summaryDurationEl) summaryDurationEl.textContent = `Chu kỳ đăng ký: ${durationLabel}`;
+            let durationLabel;
+            if (currentLang === 'vi') {
+                durationLabel = currentDuration === 12 ? '1 năm' : `${currentDuration} tháng`;
+            } else {
+                durationLabel = currentDuration === 12 ? '1 year' : `${currentDuration} months`;
+            }
+            if (summaryDurationEl) summaryDurationEl.textContent = `${t('js_billing_cycle')} ${durationLabel}`;
             
-            const totalAmount = pricingMatrix[tier][currentDuration];
-            if (summaryPriceEl) summaryPriceEl.textContent = formatVND(totalAmount);
+            const matrix = currentLang === 'en' ? pricingMatrixUSD : pricingMatrixVND;
+            const totalAmount = matrix[tier][currentDuration];
+            if (summaryPriceEl) summaryPriceEl.textContent = formatPrice(totalAmount);
 
             const errEl = document.getElementById('checkout-error');
             if (errEl) errEl.style.display = 'none';
@@ -1494,7 +1607,7 @@
             const errEl = document.getElementById('checkout-error');
             
             if (!buyerName || !buyerEmail) {
-                showError('Vui lòng điền đầy đủ họ tên và email.');
+                showError(t('js_form_validation'));
                 return;
             }
 
@@ -1511,7 +1624,8 @@
                         buyer_name: buyerName,
                         buyer_email: buyerEmail,
                         return_url: window.location.origin + '/return.html',
-                        cancel_url: window.location.href
+                        cancel_url: window.location.href,
+                        currency: currentLang === 'en' ? 'USD' : 'VND'
                     })
                 });
 
@@ -1519,11 +1633,11 @@
                 if (result.success && result.data && result.data.checkout_url) {
                     window.location.href = result.data.checkout_url;
                 } else {
-                    showError(result.detail || result.error || 'Tạo link thanh toán thất bại.');
+                    showError(result.detail || result.error || t('js_payment_failed'));
                     setLoading(false);
                 }
             } catch (e) {
-                showError('Lỗi kết nối đến server.');
+                showError(t('js_connection_error'));
                 setLoading(false);
             }
         }
@@ -1542,11 +1656,11 @@
             if (isLoading) {
                 btnSubmit.disabled = true;
                 btnSubmit.style.opacity = '0.7';
-                btnSubmit.querySelector('span').textContent = 'Đang khởi tạo thanh toán...';
+                btnSubmit.querySelector('span').textContent = t('js_initializing');
             } else {
                 btnSubmit.disabled = false;
                 btnSubmit.style.opacity = '1';
-                btnSubmit.querySelector('span').textContent = 'Thanh toán qua cổng PayOS';
+                btnSubmit.querySelector('span').textContent = t('btn_pay_payos');
             }
         }
 
@@ -1555,51 +1669,51 @@
             shopee: {
                 url: 'https://shopee.vn/product-sample-detail-i.12039.4019',
                 logs: [
-                    { type: 'info', text: '[System] Khởi động trình cào dữ liệu WebHarvest...' },
-                    { type: 'info', text: '[System] Chế độ cào: Dynamic JS Fetcher (Playwright).' },
-                    { type: 'info', text: '[System] Đang kết nối tới Proxy xoay dân cư DataImpulse...' },
-                    { type: 'success', text: '[Proxy] Đã nhận IP: 185.220.101.42 (Hanoi, Vietnam).' },
-                    { type: 'info', text: '[Browser] Đang mở trang: https://shopee.vn/product-sample-detail-i.12039.4019' },
-                    { type: 'warning', text: '[Cloudflare] Đang vượt qua kiểm tra bảo mật (Bypass Challenge)...' },
-                    { type: 'success', text: '[Cloudflare] Bypass thành công trong 1.8s.' },
-                    { type: 'info', text: '[Browser] Cuộn trang tự động để tải hình ảnh (Lazy Load)...' },
-                    { type: 'success', text: '[Parser] Đã trích xuất: Tên sản phẩm: "Áo khoác gió thời trang".' },
-                    { type: 'success', text: '[Parser] Đã trích xuất: Giá: 299,000đ | Kho hàng: 142.' },
-                    { type: 'success', text: '[Parser] Tìm thấy 6 hình ảnh sản phẩm độ phân giải cao.' },
-                    { type: 'info', text: '[Downloader] Đang tải ảnh xuống thư mục cục bộ...' },
-                    { type: 'success', text: '[Downloader] Đã tải thành công 6/6 ảnh.' },
-                    { type: 'success', text: '[Exporter] Đã xuất file Excel dữ liệu: /output/shopee_products.xlsx' },
-                    { type: 'success', text: '[System] Tiến trình hoàn tất thành công trong 6.4s.' }
+                    { type: 'info', key: 'sim_log_sys_start' },
+                    { type: 'info', key: 'sim_log_shopee_mode' },
+                    { type: 'info', key: 'sim_log_proxy_connect' },
+                    { type: 'success', key: 'sim_log_proxy_ip' },
+                    { type: 'info', key: 'sim_log_shopee_open' },
+                    { type: 'warning', key: 'sim_log_cloudflare_challenge' },
+                    { type: 'success', key: 'sim_log_cloudflare_success' },
+                    { type: 'info', key: 'sim_log_lazy_load' },
+                    { type: 'success', key: 'sim_log_shopee_parse_title' },
+                    { type: 'success', key: 'sim_log_shopee_parse_price' },
+                    { type: 'success', key: 'sim_log_shopee_images' },
+                    { type: 'info', key: 'sim_log_download_dir' },
+                    { type: 'success', key: 'sim_log_download_success_6' },
+                    { type: 'success', key: 'sim_log_export_shopee' },
+                    { type: 'success', key: 'sim_log_sys_success_shopee' }
                 ]
             },
             pinterest: {
                 url: 'https://pinterest.com/pin/sample-image-board-10294',
                 logs: [
-                    { type: 'info', text: '[System] Khởi động trình cào dữ liệu WebHarvest...' },
-                    { type: 'info', text: '[System] Chế độ cào: Stealth Mode (Bypass bot detection).' },
-                    { type: 'info', text: '[System] Kết nối qua Proxy DataImpulse: IP: 93.115.95.12 (Tokyo, Japan).' },
-                    { type: 'info', text: '[Browser] Đang mở URL Pinterest...' },
-                    { type: 'success', text: '[Browser] Trang Pinterest tải thành công.' },
-                    { type: 'info', text: '[Parser] Tìm kiếm các liên kết hình ảnh gốc trong Gallery Grid...' },
-                    { type: 'success', text: '[Parser] Trích xuất thành công 24 ảnh độ phân giải cao.' },
-                    { type: 'info', text: '[Downloader] Đang tải song song 24 ảnh...' },
-                    { type: 'success', text: '[Downloader] Tải thành công 24 ảnh. (Tốc độ TB: 4.8MB/s).' },
-                    { type: 'success', text: '[System] Cào dữ liệu hoàn tất trong 4.2s.' }
+                    { type: 'info', key: 'sim_log_sys_start' },
+                    { type: 'info', key: 'sim_log_stealth_mode' },
+                    { type: 'info', key: 'sim_log_proxy_ip_tokyo' },
+                    { type: 'info', key: 'sim_log_pinterest_open' },
+                    { type: 'success', key: 'sim_log_pinterest_success' },
+                    { type: 'info', key: 'sim_log_pinterest_grid' },
+                    { type: 'success', key: 'sim_log_pinterest_images' },
+                    { type: 'info', key: 'sim_log_download_parallel_24' },
+                    { type: 'success', key: 'sim_log_download_success_24' },
+                    { type: 'success', key: 'sim_log_sys_success_pinterest' }
                 ]
             },
             shopify: {
                 url: 'https://sample-store.myshopify.com/collections/all',
                 logs: [
-                    { type: 'info', text: '[System] Khởi động trình cào dữ liệu WebHarvest...' },
-                    { type: 'info', text: '[System] Chế độ cào: Static Parser (httpx - Tốc độ cực hạn).' },
-                    { type: 'info', text: '[System] Bỏ qua Proxy (sử dụng IP Local để tối ưu hóa tốc độ).' },
-                    { type: 'info', text: '[Static] Đang gửi yêu cầu GET HTTP...' },
-                    { type: 'success', text: '[Static] Server phản hồi: 200 OK trong 180ms.' },
-                    { type: 'info', text: '[Parser] Phân tích cây DOM HTML...' },
-                    { type: 'success', text: '[Parser] Tìm thấy cấu trúc Catalog của 50 sản phẩm.' },
-                    { type: 'success', text: '[Parser] Trích xuất thành công: Tên, Giá, SKU, Biến thể và Ảnh.' },
-                    { type: 'success', text: '[Exporter] Đã xuất file Excel dữ liệu: /output/shopify_all.xlsx' },
-                    { type: 'success', text: '[System] Hoàn tất 50 sản phẩm trong 1.5s.' }
+                    { type: 'info', key: 'sim_log_sys_start' },
+                    { type: 'info', key: 'sim_log_static_mode' },
+                    { type: 'info', key: 'sim_log_bypass_proxy' },
+                    { type: 'info', key: 'sim_log_http_get' },
+                    { type: 'success', key: 'sim_log_http_200' },
+                    { type: 'info', key: 'sim_log_dom_parse' },
+                    { type: 'success', key: 'sim_log_shopify_catalog' },
+                    { type: 'success', key: 'sim_log_shopify_extract' },
+                    { type: 'success', key: 'sim_log_export_shopify' },
+                    { type: 'success', key: 'sim_log_sys_success_shopify' }
                 ]
             }
         };
@@ -1631,7 +1745,7 @@
                     const log = data.logs[logIndex];
                     const lineEl = document.createElement('div');
                     lineEl.className = `sim-console-line ${log.type || ''}`;
-                    lineEl.textContent = log.text;
+                    lineEl.textContent = t(log.key);
                     consoleScreen.appendChild(lineEl);
                     consoleScreen.scrollTop = consoleScreen.scrollHeight;
                     logIndex++;

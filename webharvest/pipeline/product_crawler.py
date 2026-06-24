@@ -140,21 +140,62 @@ class ProductCrawlPipeline:
             logger.info("Using fetcher type: %s for %s", fetcher_type, start_url)
 
             fetcher = None
-            if fetcher_type == "stealth":
-                fetcher = StealthFetcher(proxies=self.proxies)
-            elif fetcher_type == "dynamic":
-                fetcher = DynamicFetcher(proxies=self.proxies)
-            else:
-                fetcher = StaticFetcher(proxies=self.proxies)
+            resp = None
+            loop = asyncio.get_running_loop()
 
             try:
                 # 1. Fetch start URL
                 self._emit("fetch_page_start", {"url": start_url, "fetcher": fetcher_type})
-                loop = asyncio.get_running_loop()
-                
-                # Fetch page inside thread pool
-                resp = await loop.run_in_executor(None, lambda: fetcher.get(start_url))
-                
+
+                if fetcher_type == "stealth":
+                    # For stealth sites, try curl_cffi TLS impersonation FIRST
+                    # (lightweight, no browser dependency, works with proxies)
+                    logger.info("Stealth site detected — trying curl_cffi TLS bypass first")
+                    curl_resp = await self._try_curl_cffi_stealth(start_url)
+                    if curl_resp and curl_resp.ok:
+                        resp = curl_resp
+                        # Create a StaticFetcher for subsequent pages (will also fallback)
+                        fetcher = StaticFetcher(proxies=self.proxies)
+                    else:
+                        # Fallback to Playwright StealthFetcher
+                        logger.info("curl_cffi failed, trying Playwright StealthFetcher")
+                        try:
+                            fetcher = StealthFetcher(proxies=self.proxies)
+                            resp = await loop.run_in_executor(None, lambda: fetcher.get(start_url))
+                        except Exception as pw_err:
+                            logger.warning("Playwright StealthFetcher unavailable: %s", pw_err)
+                            # Last resort: static fetcher with proxies
+                            fetcher = StaticFetcher(proxies=self.proxies)
+                            resp = await loop.run_in_executor(None, lambda: fetcher.get(start_url))
+
+                elif fetcher_type == "dynamic":
+                    try:
+                        fetcher = DynamicFetcher(proxies=self.proxies)
+                        resp = await loop.run_in_executor(None, lambda: fetcher.get(start_url))
+                    except Exception as dyn_err:
+                        logger.warning("DynamicFetcher unavailable: %s", dyn_err)
+                        fetcher = StaticFetcher(proxies=self.proxies)
+                        resp = await loop.run_in_executor(None, lambda: fetcher.get(start_url))
+                else:
+                    fetcher = StaticFetcher(proxies=self.proxies)
+                    resp = await loop.run_in_executor(None, lambda: fetcher.get(start_url))
+
+                # ── Fallback on 403/block for non-stealth fetchers ──
+                if resp and (not resp.ok or not resp.html) and resp.status_code in (403, 503):
+                    logger.warning(
+                        "Fetch failed (status=%d) with %s, trying curl_cffi TLS fallback for %s",
+                        resp.status_code, fetcher_type, start_url,
+                    )
+                    self._emit("fetcher_fallback", {
+                        "url": start_url,
+                        "from": fetcher_type,
+                        "to": "curl_cffi",
+                        "reason": f"HTTP {resp.status_code}",
+                    })
+                    curl_resp = await self._try_curl_cffi_stealth(start_url)
+                    if curl_resp and curl_resp.ok:
+                        resp = curl_resp
+
                 if not resp.ok or not resp.html:
                     self._emit("fetch_page_failed", {"url": start_url, "status": resp.status_code})
                     continue
@@ -211,12 +252,14 @@ class ProductCrawlPipeline:
                     "url": p.url,
                     "source_site": p.source_site,
                     "main_image_url": p.main_image_url,
+                    "local_image_path": getattr(p, "local_image_path", None),
                     "price": p.price,
                     "currency": p.currency,
                     "description": p.description,
                     "category": p.category,
                     "colors": p.colors,
                     "sizes": p.sizes,
+                    "local_additional_images": getattr(p, "local_additional_images", []),
                     "variants": [
                         {
                             "color": v.color,
@@ -225,6 +268,7 @@ class ProductCrawlPipeline:
                             "sku": v.sku,
                             "in_stock": v.in_stock,
                             "image_url": v.image_url,
+                            "local_image_path": getattr(v, "local_image_path", None),
                         }
                         for v in p.variants
                     ],
@@ -239,6 +283,174 @@ class ProductCrawlPipeline:
         self._emit("product_crawl_done", {"count": len(self._results)})
         return self._results
 
+    async def _try_curl_cffi_stealth(self, url: str) -> "Optional[FetchResponse]":
+        """Last-resort fetch using curl_cffi with TLS impersonation + proxy rotation.
+
+        Returns a FetchResponse on success, None on failure.
+        """
+        from webharvest.fetchers.base import FetchResponse
+        try:
+            from curl_cffi import requests as curl_requests
+        except ImportError:
+            logger.warning("curl_cffi not installed — cannot use TLS impersonation fallback")
+            return None
+
+        targets = ["safari17_0", "chrome124", "chrome120", "safari15_5"]
+        headers = {
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Connection": "keep-alive",
+            "Upgrade-Insecure-Requests": "1",
+            "Cache-Control": "max-age=0",
+        }
+
+        loop = asyncio.get_running_loop()
+
+        for target in targets:
+            # Try with each proxy first, then direct
+            proxy_configs = [{"https": p, "http": p} for p in self.proxies] + [None]
+
+            for proxy_map in proxy_configs:
+                def _sync_fetch(t=target, pm=proxy_map):
+                    try:
+                        resp = curl_requests.get(
+                            url,
+                            headers=headers,
+                            impersonate=t,
+                            timeout=20,
+                            allow_redirects=True,
+                            proxies=pm,
+                        )
+                        return resp.text, resp.status_code
+                    except Exception as exc:
+                        logger.debug("curl_cffi [%s] failed for %s: %s", t, url, exc)
+                        return "", 0
+
+                html, status = await loop.run_in_executor(None, _sync_fetch)
+
+                if status == 200 and html and len(html) > 2000:
+                    logger.info(
+                        "curl_cffi [%s] succeeded for %s (status=%d, len=%d, proxy=%s)",
+                        target, url, status, len(html), bool(proxy_map),
+                    )
+                    return FetchResponse(
+                        html=html,
+                        status_code=status,
+                        headers={},
+                        url=url,
+                        content=html.encode("utf-8", errors="replace"),
+                        encoding="utf-8",
+                        elapsed=0.0,
+                    )
+
+        logger.warning("All curl_cffi TLS bypass attempts failed for %s", url)
+        return None
+
+    async def _download_bytes(self, url: str) -> Optional[bytes]:
+        """Download raw bytes from URL with proxy fallback and curl_cffi bypass if needed."""
+        import httpx
+        loop = asyncio.get_running_loop()
+        
+        # Build client options
+        proxy_configs = self.proxies + [None]
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+            "Accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        
+        for proxy in proxy_configs:
+            try:
+                def _fetch():
+                    proxies_dict = {"http://": proxy, "https://": proxy} if proxy else None
+                    with httpx.Client(proxies=proxies_dict, timeout=15.0, verify=False) as client:
+                        resp = client.get(url, headers=headers, follow_redirects=True)
+                        if resp.status_code == 200:
+                            return resp.content
+                        return None
+                        
+                content = await loop.run_in_executor(None, _fetch)
+                if content:
+                    return content
+            except Exception as e:
+                logger.debug("httpx image download failed with proxy %s: %s", proxy, e)
+                
+        # Fallback to curl_cffi
+        try:
+            from curl_cffi import requests as curl_requests
+            targets = ["safari17_0", "chrome124"]
+            for target in targets:
+                for proxy in proxy_configs:
+                    def _sync_fetch():
+                        proxies_dict = {"http": proxy, "https": proxy} if proxy else None
+                        resp = curl_requests.get(
+                            url,
+                            headers=headers,
+                            impersonate=target,
+                            timeout=15,
+                            allow_redirects=True,
+                            proxies=proxies_dict,
+                            verify=False
+                        )
+                        if resp.status_code == 200:
+                            return resp.content
+                        return None
+                    try:
+                        content = await loop.run_in_executor(None, _sync_fetch)
+                        if content:
+                            return content
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+            
+        return None
+
+    async def _download_product_image(self, url: str, site_domain: str) -> Optional[str]:
+        """Download product image and save it locally.
+        
+        Returns the absolute local path to the downloaded file, or None if download fails.
+        """
+        if not url:
+            return None
+            
+        import hashlib
+        try:
+            # Generate subfolder
+            domain_folder = site_domain.replace(".", "_")
+            outdir = self.output_dir / "images" / domain_folder
+            outdir.mkdir(parents=True, exist_ok=True)
+            
+            # Extract extension
+            ext = ".jpg"
+            parsed = urlparse(url)
+            path_ext = Path(parsed.path).suffix.lower()
+            if path_ext in (".jpg", ".jpeg", ".png", ".gif", ".webp", ".svg", ".bmp", ".tiff", ".avif", ".ico"):
+                ext = path_ext
+                if ext == ".jpeg":
+                    ext = ".jpg"
+            
+            # Generate unique filename using URL hash
+            url_hash = hashlib.md5(url.encode("utf-8")).hexdigest()
+            filename = f"{url_hash[:12]}{ext}"
+            filepath = outdir / filename
+            
+            # If already exists, return absolute path directly
+            if filepath.exists():
+                return str(filepath.resolve())
+                
+            # Download image bytes
+            data = await self._download_bytes(url)
+            if data:
+                filepath.write_bytes(data)
+                logger.info("Saved product image to %s", filepath)
+                return str(filepath.resolve())
+        except Exception as e:
+            logger.warning("Failed to download image %s: %s", url, e)
+            
+        return None
+
     async def _crawl_product_page(self, url: str, extractor: BaseSiteExtractor, fetcher: Any):
         """Crawls and extracts a single product page."""
         try:
@@ -248,6 +460,16 @@ class ProductCrawlPipeline:
             loop = asyncio.get_running_loop()
             resp = await loop.run_in_executor(None, lambda: fetcher.get(url))
 
+            # Fallback on 403/block for individual product pages too
+            if (not resp.ok or not resp.html) and resp.status_code in (403, 503):
+                logger.warning(
+                    "Product page fetch failed (status=%d), trying curl_cffi fallback for %s",
+                    resp.status_code, url,
+                )
+                curl_resp = await self._try_curl_cffi_stealth(url)
+                if curl_resp:
+                    resp = curl_resp
+
             if not resp.ok or not resp.html:
                 self._emit("fetch_product_failed", {"url": url, "status": resp.status_code})
                 return
@@ -255,15 +477,41 @@ class ProductCrawlPipeline:
             # Extract product
             product_data = extractor.extract_product(resp.html, url)
             if product_data:
-                # Clean variants to filter out paid/upsell variants or specific types if needed
-                # (Requirements: "Hiện tại loại bỏ những size phải trả phí, sẽ lên phương án xử lý sau")
-                # Since we don't have paid sizes defined yet, we keep all standard variants
+                # 1. Download main image
+                if product_data.main_image_url:
+                    local_img = await self._download_product_image(product_data.main_image_url, product_data.source_site)
+                    if local_img:
+                        product_data.local_image_path = local_img
+                        
+                # 2. Download variant images
+                if product_data.variants:
+                    for variant in product_data.variants:
+                        if variant.image_url:
+                            local_var_img = await self._download_product_image(variant.image_url, product_data.source_site)
+                            if local_var_img:
+                                variant.local_image_path = local_var_img
+
+                # 3. Download additional images
+                if product_data.additional_images:
+                    product_data.local_additional_images = []
+                    for add_img in product_data.additional_images:
+                        local_add_img = await self._download_product_image(add_img, product_data.source_site)
+                        if local_add_img:
+                            product_data.local_additional_images.append(local_add_img)
+
                 self._results.append(product_data)
+                
+                # Emit product success with local image URL
+                fe_image = product_data.main_image_url
+                if product_data.local_image_path:
+                    from urllib.parse import quote
+                    fe_image = f"/api/image?path={quote(product_data.local_image_path)}"
+                    
                 self._emit("product_extracted", {
                     "url": url,
                     "title": product_data.title,
                     "price": product_data.price,
-                    "image": product_data.main_image_url,
+                    "image": fe_image,
                     "variants_count": len(product_data.variants)
                 })
             else:

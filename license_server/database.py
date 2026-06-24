@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import json
+import os
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
@@ -40,8 +41,8 @@ SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS license_keys (
     id              SERIAL PRIMARY KEY,
     key             VARCHAR(30) UNIQUE NOT NULL,
-    tier            VARCHAR(10) NOT NULL CHECK(tier IN ('basic','pro','unlimited')),
-    duration_months SMALLINT NOT NULL CHECK(duration_months IN (1,3,6,12)),
+    tier            VARCHAR(10) NOT NULL CHECK(tier IN ('basic','pro','unlimited','trial')),
+    duration_months SMALLINT NOT NULL CHECK(duration_months IN (0,1,3,6,12)),
     status          VARCHAR(10) NOT NULL DEFAULT 'unused'
                     CHECK(status IN ('unused','active','expired','revoked')),
     amount_vnd      INTEGER NOT NULL DEFAULT 0,
@@ -146,14 +147,25 @@ async def init_db(database_url: str) -> None:
         return
 
     try:
-        pool = await asyncpg.create_pool(database_url, min_size=2, max_size=10)
+        pool = await asyncpg.create_pool(database_url, min_size=5, max_size=25)
         async with pool.acquire() as conn:
             await conn.execute(SCHEMA_SQL)
+            try:
+                await conn.execute("ALTER TABLE license_keys DROP CONSTRAINT IF EXISTS license_keys_tier_check")
+                await conn.execute("ALTER TABLE license_keys ADD CONSTRAINT license_keys_tier_check CHECK (tier IN ('basic','pro','unlimited','trial'))")
+                await conn.execute("CREATE INDEX IF NOT EXISTS idx_keys_device_tier ON license_keys(device_id, tier)")
+                logger.info("Database migrations applied successfully")
+            except Exception as migration_error:
+                logger.warning("Database migrations warning: %s", migration_error)
         logger.info("Database initialized successfully (PostgreSQL)")
     except Exception as e:
-        logger.error("Failed to connect to PostgreSQL: %s. ENABLING IN-MEMORY DATABASE FALLBACK.", e)
-        is_mock = True
-        _setup_mock_data()
+        if os.getenv('WEBHARVEST_ALLOW_MOCK', '').lower() in ('1', 'true', 'yes'):
+            logger.warning("Using mock database (WEBHARVEST_ALLOW_MOCK=true)")
+            is_mock = True
+            _setup_mock_data()
+        else:
+            logger.critical("Database connection failed: %s. Set WEBHARVEST_ALLOW_MOCK=true to use in-memory fallback.", e)
+            raise SystemExit(1)
 
 
 def _setup_mock_data():
@@ -276,6 +288,63 @@ async def create_key(
         return dict(row)
 
 
+
+async def create_trial_key(device_id: str, device_name: str = None, email: str = None) -> dict:
+    """Create a trial key for a device, or return existing trial if device already has one.
+
+    Trial keys are auto-activated and bound to the device immediately.
+    Returns the key row dict.
+    """
+    global _key_id_seq, is_mock
+    from .license import generate_key
+    from .config import TRIAL_EXPIRY_DAYS
+
+    now = datetime.now(timezone.utc)
+    expires_at = now + timedelta(days=TRIAL_EXPIRY_DAYS)
+
+    if is_mock:
+        # Check if device already has a trial
+        for row in _mock_keys.values():
+            if row["device_id"] == device_id and row["tier"] == "trial" and row["status"] == "active":
+                return row
+
+        key = generate_key()
+        row = {
+            "id": _key_id_seq, "key": key, "tier": "trial", "duration_months": 0,
+            "status": "active", "amount_vnd": 0, "owner_email": email, "owner_name": None,
+            "device_id": device_id, "device_name": device_name, "rebind_count": 0,
+            "created_at": now, "activated_at": now, "expires_at": expires_at,
+            "last_validated": now, "order_code": None,
+            "payos_tx_id": None, "total_requests": 0, "total_urls": 0,
+            "note": "Trial key",
+        }
+        _mock_keys[_key_id_seq] = row
+        _mock_key_by_str[key] = row
+        _key_id_seq += 1
+        return row
+
+    async with pool.acquire() as conn:
+        # Check if device already has an active trial
+        existing = await conn.fetchrow(
+            "SELECT * FROM license_keys WHERE device_id=$1 AND tier='trial' AND status='active'",
+            device_id,
+        )
+        if existing:
+            return dict(existing)
+
+        # Create new trial key
+        key = generate_key()
+        row = await conn.fetchrow(
+            """INSERT INTO license_keys
+               (key, tier, duration_months, amount_vnd, owner_email, device_id, device_name,
+                status, activated_at, expires_at, last_validated, note)
+               VALUES ($1, 'trial', 0, 0, $2, $3, $4, 'active', $5, $6, $5, 'Trial key')
+               RETURNING *""",
+            key, email, device_id, device_name, now, expires_at,
+        )
+        return dict(row)
+
+
 async def activate_key(key: str, device_id: str, device_name: str = None) -> dict | None:
     """Activate an unused key and bind it to a device. Returns updated row or None."""
     global is_mock
@@ -301,45 +370,56 @@ async def activate_key(key: str, device_id: str, device_name: str = None) -> dic
         row["device_id"] = device_id
         row["device_name"] = device_name
         row["activated_at"] = now
-        row["expires_at"] = now + timedelta(days=30 * row["duration_months"])
+        # Trial keys expire after TRIAL_EXPIRY_DAYS; paid keys use duration_months
+        if row["tier"] == "trial":
+            from .config import TRIAL_EXPIRY_DAYS
+            row["expires_at"] = now + timedelta(days=TRIAL_EXPIRY_DAYS)
+        else:
+            row["expires_at"] = now + timedelta(days=30 * row["duration_months"])
         row["last_validated"] = now
         return row
 
     async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT * FROM license_keys WHERE key=$1", key
-        )
-        if not row:
-            return None
+        async with conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT * FROM license_keys WHERE key=$1 FOR UPDATE", key
+            )
+            if not row:
+                return None
 
-        if row["status"] == "active":
-            # Already active — check device match
-            if row["device_id"] == device_id:
-                return dict(row)
-            if row["device_id"] is None:
-                updated = await conn.fetchrow(
-                    """UPDATE license_keys
-                       SET device_id=$2, device_name=$3, last_validated=$4
-                       WHERE key=$1 AND status='active' AND device_id IS NULL
-                       RETURNING *""",
-                    key, device_id, device_name, now
-                )
-                return dict(updated) if updated else None
-            return None
+            if row["status"] == "active":
+                # Already active — check device match
+                if row["device_id"] == device_id:
+                    return dict(row)
+                if row["device_id"] is None:
+                    updated = await conn.fetchrow(
+                        """UPDATE license_keys
+                           SET device_id=$2, device_name=$3, last_validated=$4
+                           WHERE key=$1 AND status='active' AND device_id IS NULL
+                           RETURNING *""",
+                        key, device_id, device_name, now
+                    )
+                    return dict(updated) if updated else None
+                return None
 
-        if row["status"] != "unused":
-            return None
+            if row["status"] != "unused":
+                return None
 
-        expires_at = now + timedelta(days=30 * row["duration_months"])
-        updated = await conn.fetchrow(
-            """UPDATE license_keys
-               SET status='active', device_id=$2, device_name=$3,
-                   activated_at=$4, expires_at=$5, last_validated=$4
-               WHERE key=$1 AND status='unused'
-               RETURNING *""",
-               key, device_id, device_name, now, expires_at,
-        )
-        return dict(updated) if updated else None
+            # Trial keys expire after TRIAL_EXPIRY_DAYS; paid keys use duration_months
+            if row["tier"] == "trial":
+                from .config import TRIAL_EXPIRY_DAYS
+                expires_at = now + timedelta(days=TRIAL_EXPIRY_DAYS)
+            else:
+                expires_at = now + timedelta(days=30 * row["duration_months"])
+            updated = await conn.fetchrow(
+                """UPDATE license_keys
+                   SET status='active', device_id=$2, device_name=$3,
+                       activated_at=$4, expires_at=$5, last_validated=$4
+                   WHERE key=$1 AND status='unused'
+                   RETURNING *""",
+                   key, device_id, device_name, now, expires_at,
+            )
+            return dict(updated) if updated else None
 
 
 async def validate_key(key: str, device_id: str) -> dict | None:
@@ -356,6 +436,11 @@ async def validate_key(key: str, device_id: str) -> dict | None:
         if row["expires_at"] and row["expires_at"] < now:
             row["status"] = "expired"
             return None
+        # Trial keys: check total URL quota exhausted
+        if row["tier"] == "trial":
+            from .config import TRIAL_MAX_URLS
+            if row.get("total_urls", 0) >= TRIAL_MAX_URLS:
+                return None  # TRIAL_EXHAUSTED
         row["last_validated"] = now
         row["total_requests"] += 1
         return row
@@ -373,6 +458,11 @@ async def validate_key(key: str, device_id: str) -> dict | None:
                 "UPDATE license_keys SET status='expired' WHERE id=$1", row["id"]
             )
             return None
+        # Trial keys: check total URL quota exhausted
+        if row["tier"] == "trial":
+            from .config import TRIAL_MAX_URLS
+            if (row.get("total_urls", 0) or 0) >= TRIAL_MAX_URLS:
+                return None  # TRIAL_EXHAUSTED
 
         await conn.execute(
             "UPDATE license_keys SET last_validated=$2, total_requests=total_requests+1 WHERE id=$1",
@@ -627,6 +717,11 @@ async def increment_daily_usage(key_id: int, urls: int = 1) -> int:
         return _mock_daily_usage[ck]
 
     async with pool.acquire() as conn:
+        # Increment total urls on the key
+        await conn.execute(
+            "UPDATE license_keys SET total_urls = COALESCE(total_urls, 0) + $2 WHERE id = $1",
+            key_id, urls
+        )
         row = await conn.fetchrow(
             """INSERT INTO daily_usage (key_id, date, urls_crawled, requests_count)
                VALUES ($1, $2, $3, 1)
@@ -637,6 +732,43 @@ async def increment_daily_usage(key_id: int, urls: int = 1) -> int:
             key_id, today, urls,
         )
         return row["urls_crawled"]
+
+
+async def check_and_increment_daily_usage(key_id: int, daily_limit: int) -> int | None:
+    """Atomically check and increment daily usage. Returns new count or None if limit exceeded."""
+    global is_mock
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    if is_mock:
+        ck = f"{key_id}:{today}"
+        current = _mock_daily_usage.get(ck, 0)
+        if current >= daily_limit:
+            return None
+        _mock_daily_usage[ck] = current + 1
+        key_row = _mock_keys.get(key_id)
+        if key_row:
+            key_row["total_urls"] = key_row.get("total_urls", 0) + 1
+        return _mock_daily_usage[ck]
+
+    async with pool.acquire() as conn:
+        # Atomically insert or increment, but only if under daily_limit
+        result = await conn.fetchrow("""
+            INSERT INTO daily_usage (key_id, date, urls_crawled, requests_count)
+            VALUES ($1, $2, 1, 1)
+            ON CONFLICT (key_id, date)
+            DO UPDATE SET urls_crawled = daily_usage.urls_crawled + 1,
+                          requests_count = daily_usage.requests_count + 1
+            WHERE daily_usage.urls_crawled < $3
+            RETURNING urls_crawled
+        """, key_id, today, daily_limit)
+        if result:
+            # Also increment total urls on the key
+            await conn.execute(
+                "UPDATE license_keys SET total_urls = COALESCE(total_urls, 0) + 1 WHERE id = $1",
+                key_id
+            )
+            return result['urls_crawled']
+        return None
 
 
 # ── Request Logs ──────────────────────────────────────────────────────────
@@ -950,14 +1082,16 @@ async def get_dashboard_stats(date_from: str = None, date_to: str = None) -> dic
         }
 
     async with pool.acquire() as conn:
-        total_keys = await conn.fetchval("SELECT COUNT(*) FROM license_keys")
-        active_keys = await conn.fetchval("SELECT COUNT(*) FROM license_keys WHERE status='active'")
-        expired_keys = await conn.fetchval("SELECT COUNT(*) FROM license_keys WHERE status='expired'")
-        unused_keys = await conn.fetchval("SELECT COUNT(*) FROM license_keys WHERE status='unused'")
-
-        total_devices = await conn.fetchval(
-            "SELECT COUNT(DISTINCT device_id) FROM license_keys WHERE device_id IS NOT NULL"
-        )
+        # Single query for all key stats using FILTER
+        key_stats = await conn.fetchrow("""
+            SELECT
+                COUNT(*) as total_keys,
+                COUNT(*) FILTER (WHERE status = 'active') as active_keys,
+                COUNT(*) FILTER (WHERE status = 'expired') as expired_keys,
+                COUNT(*) FILTER (WHERE status = 'unused') as unused_keys,
+                COUNT(DISTINCT device_id) FILTER (WHERE device_id IS NOT NULL) as total_devices
+            FROM license_keys
+        """)
 
         tier_counts = await conn.fetch(
             "SELECT tier, COUNT(*) as count FROM license_keys WHERE status='active' GROUP BY tier"
@@ -976,34 +1110,34 @@ async def get_dashboard_stats(date_from: str = None, date_to: str = None) -> dic
             idx += 1
 
         rev_where = " AND ".join(revenue_conditions)
-        total_revenue = await conn.fetchval(
-            f"SELECT COALESCE(SUM(amount), 0) FROM payment_transactions WHERE {rev_where}",
-            *rev_params,
-        )
-        total_transactions = await conn.fetchval(
-            f"SELECT COUNT(*) FROM payment_transactions WHERE {rev_where}",
+        rev_stats = await conn.fetchrow(
+            f"""SELECT COALESCE(SUM(amount), 0) as total_revenue,
+                       COUNT(*) as total_transactions
+                FROM payment_transactions WHERE {rev_where}""",
             *rev_params,
         )
 
-        total_requests = await conn.fetchval("SELECT COUNT(*) FROM request_logs")
-        error_requests = await conn.fetchval(
-            "SELECT COUNT(*) FROM request_logs WHERE status='error'"
-        )
+        req_stats = await conn.fetchrow("""
+            SELECT
+                COUNT(*) as total_requests,
+                COUNT(*) FILTER (WHERE status = 'error') as error_requests
+            FROM request_logs
+        """)
 
         return {
             "keys": {
-                "total": total_keys, "active": active_keys,
-                "expired": expired_keys, "unused": unused_keys,
+                "total": key_stats["total_keys"], "active": key_stats["active_keys"],
+                "expired": key_stats["expired_keys"], "unused": key_stats["unused_keys"],
             },
-            "devices": total_devices,
+            "devices": key_stats["total_devices"],
             "tiers": {r["tier"]: r["count"] for r in tier_counts},
             "revenue": {
-                "total_vnd": total_revenue,
-                "total_transactions": total_transactions,
+                "total_vnd": rev_stats["total_revenue"],
+                "total_transactions": rev_stats["total_transactions"],
             },
             "requests": {
-                "total": total_requests,
-                "errors": error_requests,
+                "total": req_stats["total_requests"],
+                "errors": req_stats["error_requests"],
             },
         }
 

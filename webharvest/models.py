@@ -101,6 +101,7 @@ class ProductVariant:
     sku: Optional[str] = None
     in_stock: bool = True
     image_url: Optional[str] = None
+    local_image_path: Optional[str] = None
 
 
 @dataclass
@@ -111,6 +112,7 @@ class ProductData:
     url: str
     source_site: str
     main_image_url: Optional[str] = None
+    local_image_path: Optional[str] = None
     price: Optional[float] = None
     currency: str = "USD"
     description: Optional[str] = None
@@ -123,6 +125,7 @@ class ProductData:
     review_count: Optional[int] = None
     tags: list[str] = field(default_factory=list)
     additional_images: list[str] = field(default_factory=list)
+    local_additional_images: list[str] = field(default_factory=list)
     crawled_at: Optional[str] = None
     raw_json: Optional[dict] = None
 

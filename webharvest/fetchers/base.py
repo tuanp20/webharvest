@@ -361,8 +361,9 @@ class BaseFetcher:
                 kwargs["proxies"] = proxy_map
 
             resp = self._session.request(**kwargs)
-            # Raise for HTTP errors so callers can catch
-            resp.raise_for_status()
+            # Return response regardless of status code so callers can
+            # inspect resp.ok / resp.status_code and decide on fallback
+            # strategies (e.g. upgrading to StealthFetcher on 403).
             return resp
 
         t0 = time.monotonic()

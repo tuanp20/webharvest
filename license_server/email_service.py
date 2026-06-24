@@ -1,4 +1,5 @@
 import logging
+import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -6,6 +7,19 @@ import asyncio
 from license_server.config import Settings
 
 logger = logging.getLogger("webharvest.email")
+
+_APP_DOWNLOAD_URL = os.getenv("APP_DOWNLOAD_URL", "https://webharvest.twentypi.com/#download")
+
+
+def _escape_html(text: str) -> str:
+    """Escape HTML special characters."""
+    return (text
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
+        .replace("'", "&#x27;"))
+
 
 def _send_email_sync(settings: Settings, to_email: str, subject: str, html_content: str):
     """Synchronous function to connect and send email via SMTP."""
@@ -48,6 +62,12 @@ def _send_email_sync(settings: Settings, to_email: str, subject: str, html_conte
 
 async def send_license_email(settings: Settings, to_email: str, name: str, key: str, tier_name: str, duration_months: int):
     """Asynchronously sends the license email on a background thread."""
+    # Escape all user-provided values before inserting into HTML
+    safe_name = _escape_html(name)
+    safe_key = _escape_html(key)
+    safe_tier = _escape_html(tier_name)
+    download_url = _escape_html(_APP_DOWNLOAD_URL)
+
     subject = f"[WebHarvest] Kích hoạt bản quyền gói {tier_name} thành công"
     
     # Elegant HTML design for the email
@@ -172,19 +192,19 @@ async def send_license_email(settings: Settings, to_email: str, name: str, key: 
                 <h1>WEBHARVEST LICENSE</h1>
             </div>
             <div class="content">
-                <div class="greeting">Xin chào {name},</div>
+                <div class="greeting">Xin chào {safe_name},</div>
                 <p>Cảm ơn bạn đã tin dùng dịch vụ và sản phẩm <strong>WebHarvest</strong>. Đơn thanh toán của bạn đã được xác nhận thành công.</p>
                 <p>Dưới đây là thông tin bản quyền (License Key) và liên kết tải phần mềm của bạn:</p>
                 
                 <div class="license-box">
                     <div style="font-size: 12px; color: #94a3b8; margin-bottom: 8px; text-transform: uppercase;">Mã bản quyền của bạn</div>
-                    <div class="license-key">{key}</div>
+                    <div class="license-key">{safe_key}</div>
                 </div>
 
                 <table class="details-table">
                     <tr>
                         <td class="details-label">Gói bản quyền</td>
-                        <td class="details-value">{tier_name}</td>
+                        <td class="details-value">{safe_tier}</td>
                     </tr>
                     <tr>
                         <td class="details-label">Thời hạn</td>
@@ -199,8 +219,8 @@ async def send_license_email(settings: Settings, to_email: str, name: str, key: 
                 <p><strong>Hướng dẫn kích hoạt:</strong> Mở ứng dụng WebHarvest trên máy tính của bạn, nhập mã bản quyền trên vào khung kích hoạt để bắt đầu sử dụng.</p>
                 
                 <div class="btn-group">
-                    <a href="http://localhost:8443/" class="btn btn-primary">Tải cho Windows (EXE)</a>
-                    <a href="http://localhost:8443/" class="btn btn-secondary">Tải cho macOS (DMG)</a>
+                    <a href="{download_url}" class="btn btn-primary">Tải cho Windows (EXE)</a>
+                    <a href="{download_url}" class="btn btn-secondary">Tải cho macOS (DMG)</a>
                 </div>
             </div>
             <div class="footer">
@@ -214,3 +234,4 @@ async def send_license_email(settings: Settings, to_email: str, name: str, key: 
     
     # Run SMTP client in background thread
     await asyncio.to_thread(_send_email_sync, settings, to_email, subject, html_content)
+

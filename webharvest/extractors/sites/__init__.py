@@ -25,6 +25,7 @@ from .redbubble import RedbubbleExtractor
 from .society6 import Society6Extractor
 from .teespring import TeeSpringExtractor
 from .aliexpress import AliExpressExtractor
+from .etsy import EtsyExtractor
 
 EXTRACTORS = [
     TeePublicExtractor,
@@ -46,6 +47,7 @@ EXTRACTORS = [
     Society6Extractor,
     TeeSpringExtractor,
     AliExpressExtractor,
+    EtsyExtractor,
 ]
 
 

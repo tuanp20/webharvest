@@ -33,28 +33,32 @@
                 <img src="/static/logo_icon.png" alt="WebHarvest Logo" width="32" height="32" style="display:block;">
             </div>
             <h1>WebHarvest</h1>
-            <p class="tagline">Trình cào và tải ảnh tự động</p>
+            <p class="tagline" data-i18n="tagline">Trình cào và tải ảnh tự động</p>
         </div>
         <div class="header-right">
-            <button type="button" id="theme-toggle" class="theme-toggle-btn btn-press" title="Chuyển chế độ sáng/tối">
+            <!-- Language Switcher -->
+            <div class="language-switcher-container">
+                <select id="language-select" class="language-select">
+                    <option value="vi">🇻🇳 VI</option>
+                    <option value="en">🇬🇧 EN</option>
+                </select>
+            </div>
+            <button type="button" id="theme-toggle" class="theme-toggle-btn btn-press" data-i18n-title="theme_toggle_title" title="Chuyển chế độ sáng/tối">
                 <i data-lucide="sun"></i>
             </button>
             <div id="license-info-header" class="license-info-header-container">
                 <span id="tier-badge" class="tier-badge" style="display:none"></span>
-                <button type="button" id="btn-manage-license" class="btn-manage-license" onclick="showManageLicense()" title="Quản lý License Key">
+                <button type="button" id="btn-manage-license" class="btn-manage-license" onclick="showManageLicense()" data-i18n-title="manage_license_title" title="Quản lý License Key">
                     <i data-lucide="key"></i>
-                    <span>License</span>
+                    <span data-i18n="btn_license">License</span>
                 </button>
             </div>
-            <div class="tabs">
-                <button class="tab-btn active" data-tab="scraper">
-                    <i data-lucide="terminal"></i> Bộ cào dữ liệu
+            <div class="tabs" role="tablist" aria-label="Main navigation">
+                <button class="tab-btn active" data-tab="scraper" role="tab" aria-selected="true" aria-controls="tab-scraper">
+                    <i data-lucide="terminal"></i> <span data-i18n="tab_scraper">Bộ cào dữ liệu</span>
                 </button>
-                <button class="tab-btn" data-tab="product-scraper" id="btn-product-scraper-tab">
-                    <i data-lucide="shopping-bag"></i> Cào sản phẩm (Catalog)
-                </button>
-                <button class="tab-btn" data-tab="gallery" id="btn-gallery-tab">
-                    <i data-lucide="image"></i> Kho ảnh đã tải
+                <button class="tab-btn" data-tab="gallery" id="btn-gallery-tab" role="tab" aria-selected="false" aria-controls="tab-gallery">
+                    <i data-lucide="image"></i> <span data-i18n="tab_gallery">Kho ảnh đã tải</span>
                 </button>
             </div>
         </div>
@@ -64,24 +68,37 @@
     <div class="app-container">
         <main class="apple-page-enter">
             <!-- Scraper Tab -->
-            <section id="tab-scraper" class="tab-content active">
+            <section id="tab-scraper" class="tab-content active" role="tabpanel" aria-labelledby="tab-scraper">
                 <div class="grid-layout">
                     <!-- Left Column: Config -->
                     <div class="card config-card apple-animate">
                         <div class="card-header">
                             <i data-lucide="sliders"></i>
-                            <h2>Cấu hình cào dữ liệu</h2>
+                            <h2 data-i18n="config_title">Cấu hình cào dữ liệu</h2>
                         </div>
                         <form id="crawl-form" class="config-form">
                             <!-- Mode Toggle: Single URL vs Batch -->
                             <div class="mode-toggle-group">
-                                <label class="mode-label">Chế độ nhập liệu</label>
+                                <label class="mode-label" data-i18n="input_mode_label">Chế độ nhập liệu</label>
                                 <div class="mode-toggle">
                                     <button type="button" class="mode-btn active" data-mode="single">
-                                        <i data-lucide="link"></i> Đơn lẻ
+                                        <i data-lucide="link"></i> <span data-i18n="mode_single">Đơn lẻ</span>
                                     </button>
                                     <button type="button" class="mode-btn" data-mode="batch">
-                                        <i data-lucide="list"></i> Hàng loạt
+                                        <i data-lucide="list"></i> <span data-i18n="mode_batch">Hàng loạt</span>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Scrape Mode Toggle: Images vs Products -->
+                            <div class="mode-toggle-group">
+                                <label class="mode-label" data-i18n="scrape_mode_label">Chế độ cào</label>
+                                <div class="mode-toggle">
+                                    <button type="button" class="scrape-mode-btn active" data-scrape-mode="images">
+                                        <i data-lucide="image"></i> <span data-i18n="scrape_mode_images">Tải ảnh</span>
+                                    </button>
+                                    <button type="button" class="scrape-mode-btn" data-scrape-mode="products">
+                                        <i data-lucide="shopping-bag"></i> <span data-i18n="scrape_mode_products">Cào sản phẩm</span>
                                     </button>
                                 </div>
                             </div>
@@ -89,10 +106,16 @@
                             <!-- Single URL Panel (default) -->
                             <div id="single-url-panel">
                                 <div class="form-group">
-                                    <label for="url">URL mục tiêu</label>
+                                    <label for="url" data-i18n="target_url_label">URL mục tiêu</label>
                                     <div class="input-with-icon">
                                         <i data-lucide="link"></i>
-                                        <input type="url" id="url" placeholder="https://example.com/gallery" value="https://www.wikipedia.org/">
+                                        <input type="url" id="url" data-i18n-placeholder="url_placeholder" placeholder="https://example.com/gallery" value="https://www.wikipedia.org/">
+                                    </div>
+                                    <!-- Auto-detect badge -->
+                                    <div id="url-detect-badge" class="url-detect-badge" style="display:none;">
+                                        <i data-lucide="sparkles"></i>
+                                        <span id="url-detect-text"></span>
+                                        <button type="button" id="btn-detect-switch" class="detect-switch-btn" data-i18n="btn_detect_switch">Chuyển</button>
                                     </div>
                                 </div>
                             </div>
@@ -101,10 +124,10 @@
                             <div id="batch-import-panel" style="display:none;">
                                 <div class="batch-source-tabs">
                                     <button type="button" class="batch-tab active" data-source="file">
-                                        <i data-lucide="file-spreadsheet"></i> Upload Excel/CSV
+                                        <i data-lucide="file-spreadsheet"></i> <span data-i18n="batch_tab_file">Upload Excel/CSV</span>
                                     </button>
                                     <button type="button" class="batch-tab" data-source="sheet">
-                                        <i data-lucide="sheet"></i> Google Sheets
+                                        <i data-lucide="sheet"></i> <span data-i18n="batch_tab_sheet">Google Sheets</span>
                                     </button>
                                 </div>
 
@@ -112,8 +135,8 @@
                                 <div id="batch-file-source" class="batch-source-content">
                                     <div class="file-drop-zone" id="file-drop-zone">
                                         <i data-lucide="upload-cloud"></i>
-                                        <p>Kéo thả file hoặc <span class="file-browse-link">chọn file</span></p>
-                                        <p class="file-hint">.xlsx, .csv, .txt — Cột đầu tiên chứa URL</p>
+                                        <p><span data-i18n="drag_drop_text">Kéo thả file hoặc </span><span class="file-browse-link" data-i18n="browse_file_link">chọn file</span></p>
+                                        <p class="file-hint" data-i18n="file_hint">.xlsx, .csv, .txt — Cột đầu tiên chứa URL</p>
                                         <input type="file" id="batch-file-input" accept=".xlsx,.xls,.csv,.tsv,.txt" hidden>
                                     </div>
                                     <div id="file-upload-status" class="upload-status" style="display:none;"></div>
@@ -122,14 +145,14 @@
                                 <!-- Google Sheets Source -->
                                 <div id="batch-sheet-source" class="batch-source-content" style="display:none;">
                                     <div class="form-group">
-                                        <label for="sheet-url">Link Google Sheets (công khai)</label>
+                                        <label for="sheet-url" data-i18n="sheet_url_label">Link Google Sheets (công khai)</label>
                                         <div class="input-with-icon">
                                             <i data-lucide="sheet"></i>
-                                            <input type="url" id="sheet-url" placeholder="https://docs.google.com/spreadsheets/d/...">
+                                            <input type="url" id="sheet-url" data-i18n-placeholder="sheet_url_placeholder" placeholder="https://docs.google.com/spreadsheets/d/...">
                                         </div>
                                     </div>
                                     <button type="button" id="btn-parse-sheet" class="btn-outline-sm btn-press">
-                                        <i data-lucide="download"></i> Tải & Phân tích
+                                        <i data-lucide="download"></i> <span data-i18n="btn_parse_sheet">Tải & Phân tích</span>
                                     </button>
                                     <div id="sheet-parse-status" class="upload-status" style="display:none;"></div>
                                 </div>
@@ -139,7 +162,7 @@
                                     <div class="url-preview-header">
                                         <span class="url-count-badge" id="url-count-badge">0 URL</span>
                                         <button type="button" id="btn-clear-urls" class="btn-outline-sm btn-press btn-outline-danger">
-                                            <i data-lucide="trash-2"></i> Xóa tất cả
+                                            <i data-lucide="trash-2"></i> <span data-i18n="btn_clear_urls">Xóa tất cả</span>
                                         </button>
                                     </div>
                                     <div class="url-preview-list" id="url-preview-list">
@@ -149,108 +172,99 @@
                             </div>
 
                             <div class="form-group">
-                                <label for="output_dir">Thư mục lưu trữ</label>
+                                <label for="output_dir" data-i18n="output_dir_label">Thư mục lưu trữ</label>
                                 <div class="input-with-icon">
                                     <i data-lucide="folder"></i>
-                                    <input type="text" id="output_dir" required placeholder="./output" value="./output">
+                                    <input type="text" id="output_dir" required data-i18n-placeholder="output_dir_placeholder" placeholder="./output" value="./output">
                                 </div>
                             </div>
 
-                            <div class="form-grid">
-                                <div class="form-group">
-                                    <label for="depth">Độ sâu thu thập</label>
-                                    <select id="depth">
-                                        <option value="0" selected>Trang hiện tại (Depth 0)</option>
-                                        <option value="1">Liên kết trực tiếp (Depth 1)</option>
-                                        <option value="2">2 tầng liên kết (Depth 2)</option>
-                                    </select>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="max_pages">Số trang tối đa</label>
-                                    <input type="number" id="max_pages" min="1" max="1000" value="20">
-                                </div>
-                            </div>
-
-                            <div class="form-grid">
-                                <div class="form-group">
-                                    <label for="fetcher">Bộ tải trang (Fetcher)</label>
-                                    <select id="fetcher">
-                                        <option value="auto" selected>Tự động phát hiện (Auto)</option>
-                                        <option value="static">Tĩnh (Static - Nhanh)</option>
-                                        <option value="dynamic">Động (Playwright - JS)</option>
-                                        <option value="stealth">Stealth (Chống chặn)</option>
-                                    </select>
-                                </div>
-
-                                <div class="form-group">
-                                    <label for="min_file_size">Kích thước tối thiểu (KB)</label>
-                                    <input type="number" id="min_file_size" min="0" value="10">
-                                </div>
-                            </div>
-
-                            <!-- Proxy Status (Server-Managed) -->
-                            <div class="form-group">
-                                <label>Proxy <span id="proxy-quota-display" class="proxy-quota-badge" style="display:none;"></span></label>
-                                <div class="proxy-panel" style="display:block;">
-                                    <div class="proxy-panel-header">
-                                        <i data-lucide="shield-check"></i>
-                                        <span>Proxy được quản lý tự động qua License Server</span>
+                            <!-- ═══ Image-only config panel ═══ -->
+                            <div id="image-config-panel">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="depth" data-i18n="depth_label">Độ sâu thu thập</label>
+                                        <select id="depth">
+                                            <option value="0" selected data-i18n="depth_0">Trang hiện tại (Depth 0)</option>
+                                            <option value="1" data-i18n="depth_1">Liên kết trực tiếp (Depth 1)</option>
+                                            <option value="2" data-i18n="depth_2">2 tầng liên kết (Depth 2)</option>
+                                        </select>
                                     </div>
-                                    <div class="proxy-server-notice">
-                                        <p>🛡️ Proxy DataImpulse được cấp phát tự động khi bạn crawl. Bạn không cần cấu hình gì thêm.</p>
-                                        <p class="proxy-notice-sub">Hệ thống tự chọn proxy tối ưu và giải phóng session sau mỗi lần crawl.</p>
-                                    </div>
-                                    <div class="proxy-actions">
-                                        <button type="button" id="btn-test-proxy" class="btn-outline-sm btn-press">
-                                            <i data-lucide="plug"></i> Kiểm tra proxy
-                                        </button>
-                                        <span id="proxy-test-result" class="proxy-test-result"></span>
+
+                                    <div class="form-group">
+                                        <label for="max_pages" data-i18n="max_pages_label">Số trang tối đa</label>
+                                        <input type="number" id="max_pages" min="1" max="1000" value="20">
                                     </div>
                                 </div>
+
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="fetcher" data-i18n="fetcher_label">Bộ tải trang (Fetcher)</label>
+                                        <select id="fetcher">
+                                            <option value="auto" selected data-i18n="fetcher_auto">Tự động phát hiện (Auto)</option>
+                                            <option value="static" data-i18n="fetcher_static">Tĩnh (Static - Nhanh)</option>
+                                            <option value="dynamic" data-i18n="fetcher_dynamic">Động (Playwright - JS)</option>
+                                            <option value="stealth" data-i18n="fetcher_stealth">Stealth (Chống chặn)</option>
+                                        </select>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label for="min_file_size" data-i18n="min_file_size_label">Kích thước tối thiểu (KB)</label>
+                                        <input type="number" id="min_file_size" min="0" value="10">
+                                    </div>
+                                </div>
+
+                                <div class="form-group">
+                                    <label data-i18n="allowed_formats_label">Định dạng ảnh cho phép</label>
+                                    <div class="checkbox-group">
+                                        <label class="checkbox-container">
+                                            <input type="checkbox" name="format" value="jpg" checked>
+                                            <span class="checkmark">JPG</span>
+                                        </label>
+                                        <label class="checkbox-container">
+                                            <input type="checkbox" name="format" value="jpeg" checked>
+                                            <span class="checkmark">JPEG</span>
+                                        </label>
+                                        <label class="checkbox-container">
+                                            <input type="checkbox" name="format" value="png" checked>
+                                            <span class="checkmark">PNG</span>
+                                        </label>
+                                        <label class="checkbox-container">
+                                            <input type="checkbox" name="format" value="webp" checked>
+                                            <span class="checkmark">WEBP</span>
+                                        </label>
+                                        <label class="checkbox-container">
+                                            <input type="checkbox" name="format" value="gif" checked>
+                                            <span class="checkmark">GIF</span>
+                                        </label>
+                                        <label class="checkbox-container">
+                                            <input type="checkbox" name="format" value="svg">
+                                            <span class="checkmark">SVG</span>
+                                        </label>
+                                    </div>
+                                </div>
                             </div>
 
-                            <div id="proxy-status" class="proxy-status">
-                                <span class="proxy-dot dot-local"></span>
-                                <span id="proxy-status-text">Đang kiểm tra trạng thái proxy...</span>
-                            </div>
-
-                            <div class="form-group">
-                                <label>Định dạng ảnh cho phép</label>
-                                <div class="checkbox-group">
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" name="format" value="jpg" checked>
-                                        <span class="checkmark">JPG</span>
-                                    </label>
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" name="format" value="jpeg" checked>
-                                        <span class="checkmark">JPEG</span>
-                                    </label>
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" name="format" value="png" checked>
-                                        <span class="checkmark">PNG</span>
-                                    </label>
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" name="format" value="webp" checked>
-                                        <span class="checkmark">WEBP</span>
-                                    </label>
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" name="format" value="gif" checked>
-                                        <span class="checkmark">GIF</span>
-                                    </label>
-                                    <label class="checkbox-container">
-                                        <input type="checkbox" name="format" value="svg">
-                                        <span class="checkmark">SVG</span>
-                                    </label>
+                            <!-- ═══ Product-only config panel (hidden by default) ═══ -->
+                            <div id="product-config-panel" style="display:none;">
+                                <div class="form-grid">
+                                    <div class="form-group">
+                                        <label for="max-products" data-i18n="max_products_label">Số lượng sản phẩm tối đa</label>
+                                        <input type="number" id="max-products" min="1" max="10000" value="50">
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="product-proxy" data-i18n="product_proxy_label">Proxy thủ công (tùy chọn)</label>
+                                        <input type="text" id="product-proxy" data-i18n-placeholder="proxy_placeholder" placeholder="http://user:pass@host:port">
+                                    </div>
                                 </div>
                             </div>
 
                             <div class="action-buttons">
                                 <button type="submit" id="btn-start" class="btn btn-primary btn-press">
-                                    <i data-lucide="play"></i> Bắt đầu Crawl
+                                    <i data-lucide="play"></i> <span data-i18n="btn_start">Bắt đầu Crawl</span>
                                 </button>
                                 <button type="button" id="btn-stop" class="btn btn-danger btn-press" disabled>
-                                    <i data-lucide="square"></i> Dừng
+                                    <i data-lucide="square"></i> <span data-i18n="btn_stop">Dừng</span>
                                 </button>
                             </div>
                         </form>
@@ -258,14 +272,14 @@
 
                     <!-- Right Column: Status & Realtime Logs -->
                     <div class="right-column">
-                        <!-- Stats Grid -->
-                        <div class="stats-grid apple-animate">
+                        <!-- Stats Grid (Image mode) -->
+                        <div id="image-stats-grid" class="stats-grid apple-animate">
                             <div class="stat-card">
                                 <div class="stat-icon icon-blue">
                                     <i data-lucide="globe"></i>
                                 </div>
                                 <div class="stat-info">
-                                    <span class="stat-label">Đã duyệt</span>
+                                    <span class="stat-label" data-i18n="stat_pages_label">Đã duyệt</span>
                                     <span class="stat-value" id="stat-pages">0</span>
                                 </div>
                             </div>
@@ -274,7 +288,7 @@
                                     <i data-lucide="search"></i>
                                 </div>
                                 <div class="stat-info">
-                                    <span class="stat-label">Tìm thấy</span>
+                                    <span class="stat-label" data-i18n="stat_found_label">Tìm thấy</span>
                                     <span class="stat-value" id="stat-found">0</span>
                                 </div>
                             </div>
@@ -283,7 +297,7 @@
                                     <i data-lucide="download-cloud"></i>
                                 </div>
                                 <div class="stat-info">
-                                    <span class="stat-label">Đã tải</span>
+                                    <span class="stat-label" data-i18n="stat_downloaded_label">Đã tải</span>
                                     <span class="stat-value" id="stat-downloaded">0</span>
                                 </div>
                             </div>
@@ -292,123 +306,20 @@
                                     <i data-lucide="alert-triangle"></i>
                                 </div>
                                 <div class="stat-info">
-                                    <span class="stat-label">Lỗi/Bỏ qua</span>
+                                    <span class="stat-label" data-i18n="stat_failed_label">Lỗi/Bỏ qua</span>
                                     <span class="stat-value" id="stat-failed">0</span>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Realtime Logs -->
-                        <div class="card logs-card apple-animate">
-                            <div class="card-header">
-                                <div class="title-with-badge">
-                                    <i data-lucide="activity"></i>
-                                    <h2>Trạng thái thời gian thực</h2>
-                                </div>
-                                <div id="status-badge" class="badge badge-inactive">Đang dừng</div>
-                            </div>
-                            <div class="logs-container" id="logs-viewer">
-                                <div class="log-line system">Sẵn sàng thu thập dữ liệu. Nhấn "Bắt đầu Crawl" để chạy...</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Live Stream Gallery -->
-                <div class="card gallery-card apple-animate">
-                    <div class="card-header">
-                        <i data-lucide="images"></i>
-                        <h2>Ảnh đang tải trực tiếp</h2>
-                        <span class="counter" id="live-gallery-count">0 ảnh</span>
-                    </div>
-                    <div class="image-grid" id="live-image-grid">
-                        <div class="placeholder-text">Ảnh được tải xuống sẽ xuất hiện tại đây theo thời gian thực...</div>
-                    </div>
-                </div>
-
-                <!-- Batch Progress Section (hidden by default, shown during batch crawl) -->
-                <div id="batch-progress-section" class="card batch-progress-card apple-animate" style="display:none;">
-                    <div class="card-header">
-                        <i data-lucide="layers"></i>
-                        <h2>Tiến trình Batch Crawl</h2>
-                        <span class="counter" id="batch-progress-counter">0/0</span>
-                    </div>
-                    <!-- Overall progress bar -->
-                    <div class="batch-overall-progress">
-                        <div class="progress-bar-track">
-                            <div class="progress-bar-fill" id="batch-progress-bar" style="width: 0%"></div>
-                        </div>
-                        <div class="batch-stats-row">
-                            <span class="batch-stat"><i data-lucide="check-circle"></i> Thành công: <strong id="batch-stat-success">0</strong></span>
-                            <span class="batch-stat"><i data-lucide="x-circle"></i> Lỗi: <strong id="batch-stat-failed">0</strong></span>
-                            <span class="batch-stat"><i data-lucide="clock"></i> Đang chạy: <strong id="batch-stat-running">0</strong></span>
-                        </div>
-                    </div>
-                    <!-- Per-URL Status Cards -->
-                    <div class="batch-url-cards" id="batch-url-cards">
-                        <!-- Populated by JS -->
-                    </div>
-                </div>
-            </section>
-
-            <!-- Product Scraper Tab -->
-            <section id="tab-product-scraper" class="tab-content">
-                <div class="grid-layout">
-                    <!-- Left Column: Config -->
-                    <div class="card config-card apple-animate">
-                        <div class="card-header">
-                            <i data-lucide="sliders"></i>
-                            <h2>Cấu hình cào sản phẩm</h2>
-                        </div>
-                        <form id="product-crawl-form" class="config-form">
-                            <div class="form-group">
-                                <label for="product-urls">URL sản phẩm / Danh mục</label>
-                                <div class="input-with-icon textarea-container">
-                                    <i data-lucide="link"></i>
-                                    <textarea id="product-urls" placeholder="Nhập một hoặc nhiều URL (mỗi URL một dòng)...&#10;Ví dụ: https://printify.com/app/products" rows="4"></textarea>
-                                </div>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="product-output-dir">Thư mục lưu trữ</label>
-                                <div class="input-with-icon">
-                                    <i data-lucide="folder"></i>
-                                    <input type="text" id="product-output-dir" required placeholder="./output_products" value="./output_products">
-                                </div>
-                            </div>
-
-                            <div class="form-grid">
-                                <div class="form-group">
-                                    <label for="max-products">Số lượng tối đa</label>
-                                    <input type="number" id="max-products" min="1" max="10000" value="50">
-                                </div>
-                                <div class="form-group">
-                                    <label for="product-proxy">Proxy thủ công (tùy chọn)</label>
-                                    <input type="text" id="product-proxy" placeholder="http://user:pass@host:port">
-                                </div>
-                            </div>
-
-                            <div class="action-buttons">
-                                <button type="submit" id="btn-product-start" class="btn btn-primary btn-press">
-                                    <i data-lucide="play"></i> Bắt đầu cào
-                                </button>
-                                <button type="button" id="btn-product-stop" class="btn btn-danger btn-press" disabled>
-                                    <i data-lucide="square"></i> Dừng
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-
-                    <!-- Right Column: Status & Realtime Logs -->
-                    <div class="right-column">
-                        <!-- Stats Grid -->
-                        <div class="stats-grid apple-animate">
+                        <!-- Stats Grid (Product mode — hidden by default) -->
+                        <div id="product-stats-grid" class="stats-grid apple-animate" style="display:none;">
                             <div class="stat-card">
                                 <div class="stat-icon icon-blue">
                                     <i data-lucide="shopping-bag"></i>
                                 </div>
                                 <div class="stat-info">
-                                    <span class="stat-label">Tổng sản phẩm</span>
+                                    <span class="stat-label" data-i18n="stat_prod_total_label">Tổng sản phẩm</span>
                                     <span class="stat-value" id="stat-prod-total">0</span>
                                 </div>
                             </div>
@@ -417,7 +328,7 @@
                                     <i data-lucide="check-circle"></i>
                                 </div>
                                 <div class="stat-info">
-                                    <span class="stat-label">Thành công</span>
+                                    <span class="stat-label" data-i18n="stat_prod_success_label">Thành công</span>
                                     <span class="stat-value" id="stat-prod-success">0</span>
                                 </div>
                             </div>
@@ -426,7 +337,7 @@
                                     <i data-lucide="alert-triangle"></i>
                                 </div>
                                 <div class="stat-info">
-                                    <span class="stat-label">Lỗi</span>
+                                    <span class="stat-label" data-i18n="stat_prod_failed_label">Lỗi</span>
                                     <span class="stat-value" id="stat-prod-failed">0</span>
                                 </div>
                             </div>
@@ -437,64 +348,110 @@
                             <div class="card-header">
                                 <div class="title-with-badge">
                                     <i data-lucide="activity"></i>
-                                    <h2>Trạng thái thời gian thực</h2>
+                                    <h2 data-i18n="logs_title">Trạng thái thời gian thực</h2>
                                 </div>
-                                <div id="product-status-badge" class="badge badge-inactive">Đang dừng</div>
+                                <div id="status-badge" class="badge badge-inactive" data-i18n="status_stopped">Đang dừng</div>
                             </div>
-                            <div class="logs-container" id="product-logs-viewer">
-                                <div class="log-line system">Sẵn sàng cào sản phẩm. Nhập URL và nhấn "Bắt đầu cào"...</div>
+                            <div class="logs-container" id="logs-viewer">
+                                <div class="log-line system" data-i18n="log_ready">Sẵn sàng thu thập dữ liệu. Nhấn "Bắt đầu Crawl" để chạy...</div>
                             </div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Crawled Products Result Grid -->
-                <div class="card gallery-card products-result-card apple-animate">
+                <!-- Live Stream Gallery (Image mode) -->
+                <div id="live-gallery-section" class="card gallery-card apple-animate">
+                    <div class="card-header">
+                        <i data-lucide="images"></i>
+                        <h2 data-i18n="live_gallery_title">Ảnh đang tải trực tiếp</h2>
+                        <span class="counter" id="live-gallery-count">0 ảnh</span>
+                    </div>
+                    <div class="image-grid" id="live-image-grid">
+                        <div class="placeholder-text" data-i18n="live_gallery_placeholder">Ảnh được tải xuống sẽ xuất hiện tại đây theo thời gian thực...</div>
+                    </div>
+                </div>
+
+                <!-- Crawled Products Result Grid (Product mode — hidden by default) -->
+                <div id="product-results-section" class="card gallery-card products-result-card apple-animate" style="display:none;">
                     <div class="card-header">
                         <i data-lucide="database"></i>
-                        <h2>Sản phẩm đã cào</h2>
+                        <h2 data-i18n="product_results_title">Sản phẩm đã cào</h2>
                         <span class="counter" id="product-result-count">0 sản phẩm</span>
+                        <button type="button" id="btn-export-csv" class="btn btn-secondary btn-press" title="Export CSV" style="padding: 4px 8px; font-size: 12px; display: flex; align-items: center; gap: 4px;">
+                            <i data-lucide="download" style="width: 14px; height: 14px;"></i> CSV
+                        </button>
+                        <button type="button" id="btn-export-json" class="btn btn-secondary btn-press" title="Export JSON" style="padding: 4px 8px; font-size: 12px; display: flex; align-items: center; gap: 4px;">
+                            <i data-lucide="file-json" style="width: 14px; height: 14px;"></i> JSON
+                        </button>
+                        <button type="button" id="btn-refresh-products" class="btn btn-secondary btn-press" style="padding: 4px 8px; font-size: 12px; display: flex; align-items: center; gap: 4px;">
+                            <i data-lucide="refresh-cw" style="width: 14px; height: 14px;"></i>
+                            <span data-i18n="btn_refresh_products">Tải lịch sử</span>
+                        </button>
                     </div>
                     <div class="products-grid-container">
                         <table class="products-table">
                             <thead>
                                 <tr>
-                                    <th class="col-img">Ảnh chính</th>
-                                    <th class="col-name">Tên sản phẩm</th>
-                                    <th class="col-price">Giá</th>
-                                    <th class="col-site">Site</th>
-                                    <th class="col-variants">Biến thể</th>
-                                    <th class="col-details">Chi tiết</th>
+                                    <th class="col-img" data-i18n="col_img">Ảnh chính</th>
+                                    <th class="col-name" data-i18n="col_name">Tên sản phẩm</th>
+                                    <th class="col-price" data-i18n="col_price">Giá</th>
+                                    <th class="col-site" data-i18n="col_site">Site</th>
+                                    <th class="col-variants" data-i18n="col_variants">Biến thể</th>
+                                    <th class="col-details" data-i18n="col_details">Chi tiết</th>
                                 </tr>
                             </thead>
                             <tbody id="product-table-body">
                                 <tr>
-                                    <td colspan="6" class="table-empty-row">Sản phẩm được cào sẽ hiển thị tại đây...</td>
+                                    <td colspan="6" class="table-empty-row" data-i18n="products_empty_placeholder">Sản phẩm được cào sẽ hiển thị tại đây...</td>
                                 </tr>
                             </tbody>
                         </table>
                     </div>
                 </div>
+
+                <!-- Batch Progress Section (hidden by default, shown during batch crawl) -->
+                <div id="batch-progress-section" class="card batch-progress-card apple-animate" style="display:none;">
+                    <div class="card-header">
+                        <i data-lucide="layers"></i>
+                        <h2 data-i18n="batch_progress_title">Tiến trình Batch Crawl</h2>
+                        <span class="counter" id="batch-progress-counter">0/0</span>
+                    </div>
+                    <!-- Overall progress bar -->
+                    <div class="batch-overall-progress">
+                        <div class="progress-bar-track">
+                            <div class="progress-bar-fill" id="batch-progress-bar" style="width: 0%"></div>
+                        </div>
+                        <div class="batch-stats-row">
+                            <span class="batch-stat"><i data-lucide="check-circle"></i> <span data-i18n="batch_stat_success">Thành công:</span> <strong id="batch-stat-success">0</strong></span>
+                            <span class="batch-stat"><i data-lucide="x-circle"></i> <span data-i18n="batch_stat_failed">Lỗi:</span> <strong id="batch-stat-failed">0</strong></span>
+                            <span class="batch-stat"><i data-lucide="clock"></i> <span data-i18n="batch_stat_running">Đang chạy:</span> <strong id="batch-stat-running">0</strong></span>
+                        </div>
+                    </div>
+                    <!-- Per-URL Status Cards -->
+                    <div class="batch-url-cards" id="batch-url-cards">
+                        <!-- Populated by JS -->
+                    </div>
+                </div>
             </section>
 
             <!-- Gallery / History Tab -->
-            <section id="tab-gallery" class="tab-content">
+            <section id="tab-gallery" class="tab-content" role="tabpanel" aria-labelledby="tab-gallery">
                 <div class="gallery-controls-card card apple-animate">
                     <div class="gallery-filters">
                         <div class="form-group flex-grow">
-                            <label for="history-output-dir">Xem ảnh từ thư mục:</label>
+                            <label for="history-output-dir" data-i18n="history_dir_label">Xem ảnh từ thư mục:</label>
                             <div class="input-with-button">
                                 <input type="text" id="history-output-dir" value="./output" placeholder="./output">
                                 <button type="button" id="btn-refresh-history" class="btn btn-secondary btn-press">
-                                    <i data-lucide="refresh-cw"></i> Quét thư mục
+                                    <i data-lucide="refresh-cw"></i> <span data-i18n="btn_refresh_history">Quét thư mục</span>
                                 </button>
                             </div>
                         </div>
                         <div class="form-group filter-input-group">
-                            <label for="search-domain">Lọc theo Tên miền / Hostname:</label>
+                            <label for="search-domain" data-i18n="filter_domain_label">Lọc theo Tên miền / Hostname:</label>
                             <div class="input-with-icon">
                                 <i data-lucide="filter"></i>
-                                <input type="text" id="search-domain" placeholder="Tất cả tên miền...">
+                                <input type="text" id="search-domain" data-i18n-placeholder="filter_domain_placeholder" placeholder="Tất cả tên miền...">
                             </div>
                         </div>
                     </div>
@@ -503,7 +460,7 @@
                 <div class="card history-gallery-container apple-animate">
                     <div class="card-header">
                         <i data-lucide="archive"></i>
-                        <h2>Danh sách ảnh trong thư mục lưu trữ</h2>
+                        <h2 data-i18n="history_gallery_title">Danh sách ảnh trong thư mục lưu trữ</h2>
                         <span class="counter" id="history-gallery-count">0 ảnh</span>
                     </div>
                     <div class="image-grid" id="history-image-grid">
@@ -515,52 +472,60 @@
     </div>
 
     <!-- Image Modal Viewer -->
-    <div id="image-modal" class="modal">
-        <span class="close-modal">&times;</span>
-        <img class="modal-content" id="modal-img" alt="Xem chi tiết ảnh">
+    <div id="image-modal" class="modal" role="dialog" aria-modal="true" aria-label="Image viewer">
+        <span class="close-modal" aria-label="Close">&times;</span>
+        <img class="modal-content" id="modal-img" data-i18n-alt="modal_img_alt" alt="Xem chi tiết ảnh">
         <div id="modal-caption" class="modal-caption"></div>
     </div>
 
     <!-- License Gate Overlay -->
-    <div id="license-gate" class="license-gate" style="display:none">
+    <div id="license-gate" class="license-gate" style="display:none" role="dialog" aria-modal="true" aria-label="License activation">
         <div class="license-gate-card">
-            <button type="button" id="btn-close-license" class="close-license" onclick="hideLicenseGate()" style="display:none;" title="Đóng">&times;</button>
+            <button type="button" id="btn-close-license" class="close-license" onclick="hideLicenseGate()" style="display:none;" data-i18n-title="btn_close_title" title="Đóng" aria-label="Close">&times;</button>
             <div class="license-logo">
                 <i data-lucide="sprout"></i>
-                <h2>WebHarvest License</h2>
-                <p>Nhập license key để kích hoạt ứng dụng</p>
+                <h2 data-i18n="license_gate_title">WebHarvest License</h2>
+                <p data-i18n="license_gate_subtitle">Nhập license key để kích hoạt ứng dụng</p>
             </div>
             <div class="license-form">
-                <input type="text" id="license-key-input" placeholder="WH-XXXXX-XXXXX-XXXXX-XXXXX" class="license-input" autocomplete="off" spellcheck="false">
+                <input type="text" id="license-key-input" data-i18n-placeholder="license_input_placeholder" placeholder="WH-XXXXX-XXXXX-XXXXX-XXXXX" class="license-input" autocomplete="off" spellcheck="false">
                 <div class="license-actions">
-                    <button type="button" onclick="activateLicenseKey()" class="btn btn-primary btn-press btn-activate">Kích hoạt</button>
-                    <button type="button" id="btn-deactivate-license" onclick="deactivateLicenseKey()" class="btn btn-press btn-deactivate" style="display: none;">Hủy kích hoạt</button>
+                    <button type="button" onclick="activateLicenseKey()" class="btn btn-primary btn-press btn-activate" data-i18n="btn_activate">Kích hoạt</button>
+                    <button type="button" id="btn-deactivate-license" onclick="deactivateLicenseKey()" class="btn btn-press btn-deactivate" style="display: none;" data-i18n="btn_deactivate">Hủy kích hoạt</button>
                 </div>
                 <p id="license-error" class="license-error" style="display:none"></p>
                 <p id="payment-status" class="payment-status" style="display:none"></p>
+                <div id="trial-box" class="trial-box">
+                    <div class="trial-text">
+                        <h4 data-i18n="trial_box_title">✨ Trải nghiệm đầy đủ tính năng</h4>
+                        <p data-i18n="trial_box_desc">Nhận 20 request cào dữ liệu miễn phí trong 14 ngày</p>
+                    </div>
+                    <button type="button" id="btn-start-trial" onclick="requestFreeTrial()" class="btn btn-trial btn-press" data-i18n="btn_trial_start">Dùng thử miễn phí</button>
+                </div>
             </div>
-            <div class="license-separator"><span>hoặc mua license mới</span></div>
+            <div class="license-separator"><span data-i18n="license_separator">hoặc mua license mới</span></div>
             <div class="license-plans">
                 <button type="button" onclick="openPurchaseFlow('basic', 1)" class="license-plan-btn">
-                    <span class="plan-name">⚡ Basic</span>
-                    <span class="plan-price">99,000đ/tháng</span>
+                    <span class="plan-name" data-i18n="plan_basic_name">⚡ Basic</span>
+                    <span class="plan-price" data-i18n="plan_basic_price">99,000đ/tháng</span>
                 </button>
                 <button type="button" onclick="openPurchaseFlow('pro', 1)" class="license-plan-btn plan-recommended">
-                    <span class="plan-name">⭐ Pro</span>
-                    <span class="plan-price">499,000đ/tháng</span>
+                    <span class="plan-name" data-i18n="plan_pro_name">⭐ Pro</span>
+                    <span class="plan-price" data-i18n="plan_pro_price">499,000đ/tháng</span>
                 </button>
                 <button type="button" onclick="openPurchaseFlow('unlimited', 1)" class="license-plan-btn">
-                    <span class="plan-name">💎 Unlimited</span>
-                    <span class="plan-price">899,000đ/tháng</span>
+                    <span class="plan-name" data-i18n="plan_unlimited_name">💎 Unlimited</span>
+                    <span class="plan-price" data-i18n="plan_unlimited_price">899,000đ/tháng</span>
                 </button>
             </div>
             <div class="device-id-display">
-                <div class="device-name-row">Thiết bị: <span id="display-device-name">Đang tải...</span></div>
-                <div class="device-id-row">Device ID: <span id="display-device-id">Đang tải...</span></div>
+                <div class="device-name-row"><span data-i18n="device_label">Thiết bị:</span> <span id="display-device-name" data-i18n="device_loading">Đang tải...</span></div>
+                <div class="device-id-row"><span data-i18n="device_id_label">Device ID:</span> <span id="display-device-id" data-i18n="device_loading">Đang tải...</span></div>
             </div>
         </div>
     </div>
 
+    <script src="/static/translations.js"></script>
     <script src="/static/app.js"></script>
 </body>
 </html>

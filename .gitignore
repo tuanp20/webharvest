@@ -60,3 +60,9 @@ WebHarvest.spec
 # Local settings & logs (contains credentials)
 webharvest_settings.json
 *.log
+
+# Temporary test folders
+1/
+quick_test/
+test_mac_debug/
+
