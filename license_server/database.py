@@ -12,7 +12,7 @@ import logging
 import json
 import os
 from datetime import datetime, timezone, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Dict, List, Optional
 
 import asyncpg
 
@@ -153,6 +153,8 @@ async def init_db(database_url: str) -> None:
             try:
                 await conn.execute("ALTER TABLE license_keys DROP CONSTRAINT IF EXISTS license_keys_tier_check")
                 await conn.execute("ALTER TABLE license_keys ADD CONSTRAINT license_keys_tier_check CHECK (tier IN ('basic','pro','unlimited','trial'))")
+                await conn.execute("ALTER TABLE license_keys DROP CONSTRAINT IF EXISTS license_keys_duration_months_check")
+                await conn.execute("ALTER TABLE license_keys ADD CONSTRAINT license_keys_duration_months_check CHECK (duration_months IN (0,1,3,6,12))")
                 await conn.execute("CREATE INDEX IF NOT EXISTS idx_keys_device_tier ON license_keys(device_id, tier)")
                 logger.info("Database migrations applied successfully")
             except Exception as migration_error:
