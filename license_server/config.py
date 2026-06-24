@@ -226,6 +226,8 @@ def packages_list() -> list[dict]:
         })
 
     for tier_key, tier_cfg in TIERS.items():
+        if tier_key not in PRICING:
+            continue
         for duration, price in PRICING[tier_key].items():
             result.append({
                 "tier": tier_key,
