@@ -9,7 +9,7 @@ import re
 from typing import Optional
 from urllib.parse import urljoin
 from bs4 import BeautifulSoup
-from webharvest.models import ProductData, ProductVariant
+from webharvest.models import ProductData
 from .base_site import BaseSiteExtractor
 
 

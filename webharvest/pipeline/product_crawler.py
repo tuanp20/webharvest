@@ -14,15 +14,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import json
-import time
 from pathlib import Path
 from typing import Optional, List, Dict, Any, Callable
 from urllib.parse import urlparse, urljoin
 
 from bs4 import BeautifulSoup
-from webharvest.models import ProductData, ProductVariant
+from webharvest.models import ProductData
 from webharvest.extractors.sites import detect_extractor, BaseSiteExtractor
-from webharvest.fetchers import StaticFetcher, DynamicFetcher, StealthFetcher
+from webharvest.fetchers import StaticFetcher, DynamicFetcher, StealthFetcher, FetchResponse
 from webharvest.extractors.json_parsers.json_ld import JsonLdProductParser
 from webharvest.extractors.content import ContentExtractor
 
@@ -137,6 +136,9 @@ class ProductCrawlPipeline:
             fetcher_type = extractor.FETCHER_TYPE
             logger.info("Using fetcher type: %s for %s", fetcher_type, start_url)
 
+            wait_timeout = getattr(extractor, "WAIT_TIMEOUT", None)
+            wait_selector = getattr(extractor, "WAIT_SELECTOR", None)
+
             fetcher = None
             resp = None
             loop = asyncio.get_running_loop()
@@ -150,16 +152,53 @@ class ProductCrawlPipeline:
                     # (lightweight, no browser dependency, works with proxies)
                     logger.info("Stealth site detected — trying curl_cffi TLS bypass first")
                     curl_resp = await self._try_curl_cffi_stealth(start_url)
-                    if curl_resp and curl_resp.ok:
+                    
+                    # Verify if curl_resp contains valid product/listing data (not a skeleton page)
+                    is_valid = False
+                    if curl_resp and curl_resp.ok and curl_resp.html:
+                        # Extract product
+                        prod_data = extractor.extract_product(curl_resp.html, start_url)
+                        if prod_data:
+                            is_valid = True
+                        else:
+                            # Extract listing
+                            links = extractor.extract_listing(curl_resp.html, start_url)
+                            if links:
+                                is_valid = True
+
+                    if is_valid:
                         resp = curl_resp
                         # Create a StaticFetcher for subsequent pages (will also fallback)
                         fetcher = StaticFetcher(proxies=self.proxies)
                     else:
                         # Fallback to Playwright StealthFetcher
-                        logger.info("curl_cffi failed, trying Playwright StealthFetcher")
+                        logger.info("curl_cffi failed or returned skeleton page, trying Playwright StealthFetcher")
+                        self._emit("fetcher_fallback", {
+                            "url": start_url,
+                            "from": "curl_cffi",
+                            "to": "stealth",
+                            "reason": "Skeleton page or fetch failed",
+                        })
                         try:
-                            fetcher = StealthFetcher(proxies=self.proxies)
-                            resp = await loop.run_in_executor(None, lambda: fetcher.get(start_url))
+                            fetcher = StealthFetcher(
+                                proxies=self.proxies,
+                                headless=False,
+                                block_resources=False,
+                                override_user_agent=False,
+                                chrome_args=[
+                                    "--window-position=-10000,-10000",
+                                    "--window-size=800,600",
+                                    "--disable-blink-features=AutomationControlled"
+                                ]
+                            )
+                            resp = await loop.run_in_executor(
+                                None,
+                                lambda: fetcher.get(
+                                    start_url,
+                                    wait_for_timeout=wait_timeout,
+                                    wait_for_selector=wait_selector
+                                )
+                            )
                         except Exception as pw_err:
                             logger.warning("Playwright StealthFetcher unavailable: %s", pw_err)
                             # Last resort: static fetcher with proxies
@@ -169,7 +208,14 @@ class ProductCrawlPipeline:
                 elif fetcher_type == "dynamic":
                     try:
                         fetcher = DynamicFetcher(proxies=self.proxies)
-                        resp = await loop.run_in_executor(None, lambda: fetcher.get(start_url))
+                        resp = await loop.run_in_executor(
+                            None,
+                            lambda: fetcher.get(
+                                start_url,
+                                wait_for_timeout=wait_timeout,
+                                wait_for_selector=wait_selector
+                            )
+                        )
                     except Exception as dyn_err:
                         logger.warning("DynamicFetcher unavailable: %s", dyn_err)
                         fetcher = StaticFetcher(proxies=self.proxies)
@@ -201,33 +247,38 @@ class ProductCrawlPipeline:
                 self._emit("fetch_page_success", {"url": start_url, "status": resp.status_code})
 
                 # 2. Check if listing page or product page
-                product_urls = extractor.extract_listing(resp.html, start_url)
-                
-                if product_urls:
-                    # It's a listing page!
-                    logger.info("Detected listing page with %d product URLs", len(product_urls))
-                    self._emit("listing_detected", {"url": start_url, "count": len(product_urls)})
-
-                    for prod_url in product_urls:
-                        if len(self._results) >= self.max_products:
-                            break
-                        if prod_url in self._visited_product_urls:
-                            continue
-                        self._visited_product_urls.add(prod_url)
-
-                        # Respect rate limit
-                        rate = extractor.RATE_LIMIT.get("rate", 0.5)
-                        delay = 1.0 / rate if rate > 0 else 1.0
-                        logger.debug("Applying politeness delay: %.2fs", delay)
-                        await asyncio.sleep(delay)
-
-                        # Crawl individual product page
-                        await self._crawl_product_page(prod_url, extractor, fetcher)
-
-                else:
+                if extractor.is_product_url(start_url):
                     # It's a single product page
-                    logger.info("Detected single product page: %s", start_url)
-                    await self._crawl_product_page(start_url, extractor, fetcher)
+                    logger.info("Detected single product page (via URL pattern): %s", start_url)
+                    await self._crawl_product_page(start_url, extractor, fetcher, resp=resp)
+                else:
+                    product_urls = extractor.extract_listing(resp.html, start_url)
+                    
+                    if product_urls:
+                        # It's a listing page!
+                        logger.info("Detected listing page with %d product URLs", len(product_urls))
+                        self._emit("listing_detected", {"url": start_url, "count": len(product_urls)})
+    
+                        for prod_url in product_urls:
+                            if len(self._results) >= self.max_products:
+                                break
+                            if prod_url in self._visited_product_urls:
+                                continue
+                            self._visited_product_urls.add(prod_url)
+    
+                            # Respect rate limit
+                            rate = extractor.RATE_LIMIT.get("rate", 0.5)
+                            delay = 1.0 / rate if rate > 0 else 1.0
+                            logger.debug("Applying politeness delay: %.2fs", delay)
+                            await asyncio.sleep(delay)
+    
+                            # Crawl individual product page
+                            await self._crawl_product_page(prod_url, extractor, fetcher)
+    
+                    else:
+                        # It's a single product page
+                        logger.info("Detected single product page: %s", start_url)
+                        await self._crawl_product_page(start_url, extractor, fetcher, resp=resp)
 
             except Exception as e:
                 logger.error("Error crawling starting URL %s: %s", start_url, e)
@@ -448,24 +499,37 @@ class ProductCrawlPipeline:
             
         return None
 
-    async def _crawl_product_page(self, url: str, extractor: BaseSiteExtractor, fetcher: Any):
+    async def _crawl_product_page(self, url: str, extractor: BaseSiteExtractor, fetcher: Any, resp: Optional[Any] = None):
         """Crawls and extracts a single product page."""
         try:
             logger.info("Crawling product page: %s", url)
             self._emit("fetch_product_start", {"url": url})
             
-            loop = asyncio.get_running_loop()
-            resp = await loop.run_in_executor(None, lambda: fetcher.get(url))
+            if resp is None:
+                loop = asyncio.get_running_loop()
+                if isinstance(fetcher, DynamicFetcher):
+                    wait_timeout = getattr(extractor, "WAIT_TIMEOUT", None)
+                    wait_selector = getattr(extractor, "WAIT_SELECTOR", None)
+                    resp = await loop.run_in_executor(
+                        None,
+                        lambda: fetcher.get(
+                            url,
+                            wait_for_timeout=wait_timeout,
+                            wait_for_selector=wait_selector
+                        )
+                    )
+                else:
+                    resp = await loop.run_in_executor(None, lambda: fetcher.get(url))
 
-            # Fallback on 403/block for individual product pages too
-            if (not resp.ok or not resp.html) and resp.status_code in (403, 503):
-                logger.warning(
-                    "Product page fetch failed (status=%d), trying curl_cffi fallback for %s",
-                    resp.status_code, url,
-                )
-                curl_resp = await self._try_curl_cffi_stealth(url)
-                if curl_resp:
-                    resp = curl_resp
+                # Fallback on 403/block for individual product pages too
+                if (not resp.ok or not resp.html) and resp.status_code in (403, 503):
+                    logger.warning(
+                        "Product page fetch failed (status=%d), trying curl_cffi fallback for %s",
+                        resp.status_code, url,
+                    )
+                    curl_resp = await self._try_curl_cffi_stealth(url)
+                    if curl_resp:
+                        resp = curl_resp
 
             if not resp.ok or not resp.html:
                 self._emit("fetch_product_failed", {"url": url, "status": resp.status_code})
@@ -473,6 +537,47 @@ class ProductCrawlPipeline:
 
             # Extract product
             product_data = extractor.extract_product(resp.html, url)
+            
+            # Fall back to Playwright StealthFetcher if extraction failed (e.g. skeleton page)
+            if not product_data and not isinstance(fetcher, StealthFetcher):
+                logger.warning(
+                    "Product data extraction returned None for %s (possibly skeleton page). Trying Playwright StealthFetcher...",
+                    url
+                )
+                self._emit("fetcher_fallback", {
+                    "url": url,
+                    "from": "static",
+                    "to": "stealth",
+                    "reason": "Failed to parse product data (skeleton/empty page)",
+                })
+                try:
+                    pw_fetcher = StealthFetcher(
+                        proxies=self.proxies,
+                        headless=False,
+                        block_resources=False,
+                        override_user_agent=False,
+                        chrome_args=[
+                            "--window-position=-10000,-10000",
+                            "--window-size=800,600",
+                            "--disable-blink-features=AutomationControlled"
+                        ]
+                    )
+                    loop = asyncio.get_running_loop()
+                    wait_timeout = getattr(extractor, "WAIT_TIMEOUT", None)
+                    wait_selector = getattr(extractor, "WAIT_SELECTOR", None)
+                    resp = await loop.run_in_executor(
+                        None,
+                        lambda: pw_fetcher.get(
+                            url,
+                            wait_for_timeout=wait_timeout,
+                            wait_for_selector=wait_selector
+                        )
+                    )
+                    if resp and resp.ok and resp.html:
+                        product_data = extractor.extract_product(resp.html, url)
+                except Exception as pw_err:
+                    logger.warning("Playwright StealthFetcher fallback failed for %s: %s", url, pw_err)
+
             if product_data:
                 # 1. Download main image
                 if product_data.main_image_url:

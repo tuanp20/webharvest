@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime, timezone
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Optional, Dict
 
 logger = logging.getLogger("license.proxy_service")
@@ -81,7 +81,7 @@ class DataImpulseProxyService:
         """
         Build a DataImpulse proxy URL with optional targeting parameters.
         
-        Format: http://username[__cr.XX][__ses.ID]:password@gw.dataimpulse.com:823
+        Format: http://username[__cr.XX][__sessid.ID]:password@gw.dataimpulse.com:823
         """
         from urllib.parse import quote_plus
         parts = [self.username]
@@ -93,7 +93,7 @@ class DataImpulseProxyService:
         
         # Sticky session (keeps same IP for duration)
         if sticky_session:
-            parts.append(f"ses.{sticky_session}")
+            parts.append(f"sessid.{sticky_session}")
         
         auth_user = "__".join(parts)
         

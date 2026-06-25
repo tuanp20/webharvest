@@ -9,9 +9,9 @@ import json
 from typing import Optional
 from urllib.parse import urljoin
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 
-from webharvest.models import ImageInfo, PageData
+from webharvest.models import PageData
 
 from .images import ImageExtractor
 

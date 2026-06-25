@@ -3,6 +3,7 @@ import os
 import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
+from email.utils import formataddr
 import asyncio
 from license_server.config import Settings
 
@@ -31,7 +32,7 @@ def _send_email_sync(settings: Settings, to_email: str, subject: str, html_conte
     
     msg = MIMEMultipart("alternative")
     msg["Subject"] = subject
-    msg["From"] = from_addr
+    msg["From"] = formataddr(("WebHarvest", from_addr))
     msg["To"] = to_email
 
     # Plain text fallback

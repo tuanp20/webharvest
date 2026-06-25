@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any, Dict, List, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional
 
 from .base import BaseFetcher, FetchResponse
 
@@ -65,11 +65,17 @@ class DynamicFetcher(BaseFetcher):
         *,
         browser_type: str = "chromium",
         headless: bool = True,
+        block_resources: bool = True,
+        override_user_agent: bool = True,
+        chrome_args: Optional[List[str]] = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(**kwargs)
         self._browser_type_name = browser_type
         self._headless = headless
+        self.block_resources = block_resources
+        self.override_user_agent = override_user_agent
+        self.chrome_args = chrome_args or []
 
         # Playwright objects – lazily initialised
         self._pw: Any = None  # playwright module
@@ -105,19 +111,90 @@ class DynamicFetcher(BaseFetcher):
         playwright = self._pw.__enter__()
 
         launcher = getattr(playwright, self._browser_type_name)
-        self._browser = launcher.launch(headless=self._headless)
-        self._browser_context = self._browser.new_context(
-            user_agent=self._pick_user_agent(),
-            viewport={"width": 1920, "height": 1080},
-            locale="en-US",
-        )
-        # Block unnecessary resources for speed
-        self._browser_context.route(
-            "**/*.{png,jpg,jpeg,gif,svg,webp,woff,woff2,ttf,otf}",
-            lambda route: route.abort(),
-        )
+        
+        # Robust browser launch logic
+        if self._browser_type_name == "chromium":
+            args = list(self.chrome_args)
+            try:
+                # Attempt launch with official chrome channel and specified headless setting
+                self._browser = launcher.launch(headless=self._headless, channel="chrome", args=args)
+                logger.info("DynamicFetcher: launched Chrome channel successfully")
+            except Exception as e:
+                logger.warning("DynamicFetcher: failed to launch Chrome channel: %s. Retrying with fallback chromium", e)
+                try:
+                    # Fallback to standard chromium with specified headless setting
+                    self._browser = launcher.launch(headless=self._headless, args=args)
+                    logger.info("DynamicFetcher: launched fallback Chromium successfully")
+                except Exception as e2:
+                    logger.warning("DynamicFetcher: failed to launch with args: %s. Retrying headless fallback", e2)
+                    # Last resort fallback: headless=True and no custom channel/args
+                    self._browser = launcher.launch(headless=True)
+                    logger.info("DynamicFetcher: launched standard headless Chromium fallback")
+        else:
+            self._browser = launcher.launch(headless=self._headless)
+
+        proxy_map = self._proxies.next()
+        pw_proxy = None
+        if proxy_map:
+            proxy_url = proxy_map.get("http") or proxy_map.get("https")
+            if proxy_url:
+                from urllib.parse import unquote
+                try:
+                    p_url = proxy_url
+                    scheme = "http"
+                    for s in ["http://", "https://", "socks5://", "socks4://"]:
+                        if p_url.startswith(s):
+                            scheme = s[:-3]
+                            p_url = p_url[len(s):]
+                            break
+                    if "@" in p_url:
+                        creds, host_port = p_url.rsplit("@", 1)
+                        if ":" in creds:
+                            username, password = creds.split(":", 1)
+                            username = unquote(username)
+                            password = unquote(password)
+                        else:
+                            username = unquote(creds)
+                            password = ""
+                    else:
+                        host_port = p_url
+                        username, password = "", ""
+                    
+                    pw_proxy = {
+                        "server": f"{scheme}://{host_port}"
+                    }
+                    if username:
+                        pw_proxy["username"] = username
+                    if password:
+                        pw_proxy["password"] = password
+                    logger.info("DynamicFetcher: using proxy %s", pw_proxy["server"])
+                except Exception as e:
+                    logger.error("DynamicFetcher: failed to parse proxy URL %s: %s", proxy_url, e)
+
+        context_kwargs = {
+            "viewport": {"width": 1920, "height": 1080},
+            "locale": "en-US",
+        }
+        if self.override_user_agent:
+            context_kwargs["user_agent"] = self._pick_user_agent()
+            
+        if pw_proxy:
+            context_kwargs["proxy"] = pw_proxy
+
+        self._browser_context = self._browser.new_context(**context_kwargs)
+        
+        # Block unnecessary resources for speed, if enabled
+        if self.block_resources:
+            self._browser_context.route(
+                "**/*.{png,jpg,jpeg,gif,svg,webp,woff,woff2,ttf,otf}",
+                lambda route: route.abort(),
+            )
+            logger.info("DynamicFetcher: resource blocking enabled")
+        else:
+            logger.info("DynamicFetcher: resource blocking disabled")
+            
         logger.info(
-            "DynamicFetcher: %s browser launched (headless=%s)",
+            "DynamicFetcher: %s browser context created (headless=%s)",
             self._browser_type_name,
             self._headless,
         )
@@ -249,8 +326,6 @@ class DynamicFetcher(BaseFetcher):
         the result as a :class:`FetchResponse`.
         """
         self._ensure_browser()
-        timeout_ms = (timeout or 60) * 1000
-
         page = self._browser_context.new_page()
         try:
             if headers:

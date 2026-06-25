@@ -22,9 +22,9 @@ from __future__ import annotations
 
 import logging
 import random
-import string
 from typing import Any, Dict, List, Optional
 
+from .base import FetchResponse
 from .dynamic import DynamicFetcher
 
 logger = logging.getLogger("webharvest.fetchers.stealth")

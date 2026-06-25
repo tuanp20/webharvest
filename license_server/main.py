@@ -8,15 +8,12 @@ Deploy on VPS; desktop apps call this server for every session.
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
-import os
 import secrets
 import time
 from collections import defaultdict
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request, Depends, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -27,7 +24,7 @@ from pathlib import Path
 
 from . import database as db
 from .config import (
-    Settings, TIERS, PRICING, VALID_DURATIONS, VALID_TIERS,
+    Settings, TIERS, VALID_DURATIONS, VALID_TIERS,
     get_price, get_tier_config, tier_to_dict, packages_list, MAX_REBINDS,
     TRIAL_MAX_URLS, TRIAL_EXPIRY_DAYS,
 )
@@ -375,7 +372,6 @@ async def validate_license(req: ValidateRequest, request: Request):
     # Trial-specific checks: exhausted or expired
     if is_trial:
         total_urls = key_row.get("total_urls", 0)
-        trial_remaining = max(0, TRIAL_MAX_URLS - total_urls)
 
         # Check if trial time-expired (belt-and-suspenders with DB check)
         if key_row.get("expires_at") and key_row["expires_at"] < datetime.now(timezone.utc):

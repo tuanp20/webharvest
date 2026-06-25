@@ -12,7 +12,7 @@ import uuid
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict
 from urllib.parse import urlparse
 from urllib.parse import urlparse as _urlparse
 
@@ -213,7 +213,12 @@ async def validate_license(key: str, device_id: str, action: str = "validate") -
                 f"{LICENSE_SERVER_URL}/api/license/validate",
                 json={"key": key, "device_id": device_id, "action": action},
             )
-            data = resp.json()
+            
+            # Safely parse JSON even on failure
+            try:
+                data = resp.json()
+            except Exception:
+                data = {}
 
             if resp.status_code == 200 and data.get("valid"):
                 # Cache successful validation
@@ -223,9 +228,9 @@ async def validate_license(key: str, device_id: str, action: str = "validate") -
                 _save_license_key_to_settings(key)
                 return data
             else:
-                # Server reachable but validation failed
-                error = data.get("error", "License validation failed")
-                error_code = data.get("error_code", "INVALID")
+                # Server reachable but validation failed or server returned non-JSON/error
+                error = data.get("error", "Không thể xác thực giấy phép (lỗi máy chủ)" if resp.status_code >= 500 else "Giấy phép không hợp lệ")
+                error_code = data.get("error_code", "SERVER_ERROR" if resp.status_code >= 500 else "INVALID")
                 raise HTTPException(status_code=403, detail={"error": error, "error_code": error_code})
 
     except _httpx.RequestError:
@@ -1485,202 +1490,202 @@ async def ws_batch_crawl(websocket: WebSocket):
                 """Crawl all URLs for one domain sequentially."""
                 nonlocal success_count, failed_count, license_invalid
 
-            async with domain_sem:
-                for idx, url in url_list:
-                    if license_invalid:
-                        break
+                async with domain_sem:
+                    for idx, url in url_list:
+                        if license_invalid:
+                            break
 
-                    # Check license validity and quota
-                    try:
-                        await _check_crawl_license("batch_crawl")
-                    except HTTPException as e:
-                        license_invalid = True
-                        detail = e.detail if isinstance(e.detail, dict) else {"error": str(e.detail)}
-                        err_msg = detail.get("error", "License validation failed")
-                        err_code = detail.get("error_code", "INVALID")
+                        # Check license validity and quota
+                        try:
+                            await _check_crawl_license("batch_crawl")
+                        except HTTPException as e:
+                            license_invalid = True
+                            detail = e.detail if isinstance(e.detail, dict) else {"error": str(e.detail)}
+                            err_msg = detail.get("error", "License validation failed")
+                            err_code = detail.get("error_code", "INVALID")
+                            try:
+                                await websocket.send_json({
+                                    "event": "batch_url_error",
+                                    "data": {"index": idx, "url": url, "error": err_msg}
+                                })
+                                await websocket.send_json({
+                                    "event": "error",
+                                    "data": {
+                                        "message": err_msg,
+                                        "error_code": err_code
+                                    }
+                                })
+                            except Exception:
+                                pass
+                            break
+
+                        # Check if WebSocket is still connected
                         try:
                             await websocket.send_json({
-                                "event": "batch_url_error",
-                                "data": {"index": idx, "url": url, "error": err_msg}
-                            })
-                            await websocket.send_json({
-                                "event": "error",
-                                "data": {
-                                    "message": err_msg,
-                                    "error_code": err_code
-                                }
+                                "event": "batch_url_start",
+                                "data": {"index": idx, "url": url, "domain": domain}
                             })
                         except Exception:
-                            pass
-                        break
+                            return  # WebSocket disconnected
 
-                    # Check if WebSocket is still connected
-                    try:
-                        await websocket.send_json({
-                            "event": "batch_url_start",
-                            "data": {"index": idx, "url": url, "domain": domain}
-                        })
-                    except Exception:
-                        return  # WebSocket disconnected
+                        domain_folder = batch_dir / domain
+                        domain_folder.mkdir(parents=True, exist_ok=True)
 
-                    domain_folder = batch_dir / domain
-                    domain_folder.mkdir(parents=True, exist_ok=True)
+                        # Auto-detect stealth domains
+                        url_fetcher = fetcher
+                        _STEALTH_DOMAINS = ["etsy.com", "pinterest.com", "instagram.com", "tiktok.com"]
+                        _domain = urlparse(url).netloc.lower()
+                        if url_fetcher == FetcherType.AUTO and any(d in _domain for d in _STEALTH_DOMAINS):
+                            url_fetcher = FetcherType.STEALTH
 
-                    # Auto-detect stealth domains
-                    url_fetcher = fetcher
-                    _STEALTH_DOMAINS = ["etsy.com", "pinterest.com", "instagram.com", "tiktok.com"]
-                    _domain = urlparse(url).netloc.lower()
-                    if url_fetcher == FetcherType.AUTO and any(d in _domain for d in _STEALTH_DOMAINS):
-                        url_fetcher = FetcherType.STEALTH
-
-                    config = CrawlConfig(
-                        url=url,
-                        output_dir=str(domain_folder),
-                        depth=depth,
-                        max_pages=max_pages,
-                        fetcher=url_fetcher,
-                        min_file_size=min_file_size,
-                        allowed_formats=allowed_formats,
-                        create_dirs=True,
-                        overwrite=False,
-                        proxy=proxy,
-                    )
-
-                    # Event queue for this URL's crawl
-                    queue: asyncio.Queue = asyncio.Queue()
-
-                    _EVENT_MAP = {
-                        "crawl_start": "crawl_started",
-                        "page_fetch": "page_started",
-                        "page_parsed": "page_fetched",
-                        "antibot_detected": "antibot_detected",
-                        "js_detected": "js_detected",
-                        "upgrade_failed": "upgrade_failed",
-                        "download_start": "download_start",
-                        "image_downloaded": "image_downloaded",
-                        "download_done": "download_done",
-                        "crawl_done": "crawl_done",
-                        "gallery_empty": "gallery_empty",
-                        "next_page": "next_page",
-                        "proxy_fallback": "proxy_fallback",
-                        "proxy_success": "proxy_success",
-                        "local_ip_success": "local_ip_success",
-                        "all_proxies_failed": "all_proxies_failed",
-                    }
-
-                    def on_progress(event: str, event_data: Dict[str, Any]):
-                        asyncio.get_event_loop().call_soon_threadsafe(
-                            queue.put_nowait, (event, event_data)
+                        config = CrawlConfig(
+                            url=url,
+                            output_dir=str(domain_folder),
+                            depth=depth,
+                            max_pages=max_pages,
+                            fetcher=url_fetcher,
+                            min_file_size=min_file_size,
+                            allowed_formats=allowed_formats,
+                            create_dirs=True,
+                            overwrite=False,
+                            proxy=proxy,
                         )
 
-                    # Background sender for this URL
-                    async def url_event_sender():
-                        pages_visited = 0
-                        images_found = 0
-                        while True:
-                            event, edata = await queue.get()
-                            if event is None:
-                                queue.task_done()
-                                break
+                        # Event queue for this URL's crawl
+                        queue: asyncio.Queue = asyncio.Queue()
 
-                            fe_event = _EVENT_MAP.get(event, event)
+                        _EVENT_MAP = {
+                            "crawl_start": "crawl_started",
+                            "page_fetch": "page_started",
+                            "page_parsed": "page_fetched",
+                            "antibot_detected": "antibot_detected",
+                            "js_detected": "js_detected",
+                            "upgrade_failed": "upgrade_failed",
+                            "download_start": "download_start",
+                            "image_downloaded": "image_downloaded",
+                            "download_done": "download_done",
+                            "crawl_done": "crawl_done",
+                            "gallery_empty": "gallery_empty",
+                            "next_page": "next_page",
+                            "proxy_fallback": "proxy_fallback",
+                            "proxy_success": "proxy_success",
+                            "local_ip_success": "local_ip_success",
+                            "all_proxies_failed": "all_proxies_failed",
+                        }
 
-                            if event == "page_parsed":
-                                pages_visited += 1
-                                images_found += edata.get("images", 0)
-                                edata["pages_visited"] = pages_visited
-                                edata["images_found"] = images_found
+                        def on_progress(event: str, event_data: Dict[str, Any]):
+                            asyncio.get_event_loop().call_soon_threadsafe(
+                                queue.put_nowait, (event, event_data)
+                            )
 
-                            if event == "crawl_done" and "result" in edata:
-                                r = edata["result"]
-                                edata = {
-                                    "result": {
-                                        "start_url": r.start_url,
-                                        "pages_visited": r.pages_visited,
-                                        "images_found": r.images_found,
-                                        "images_downloaded": r.images_downloaded,
-                                        "images_failed": r.images_failed,
-                                        "total_bytes": r.total_bytes,
-                                        "elapsed_seconds": r.elapsed_seconds,
-                                        "errors": r.errors,
-                                        "summary": r.summary(),
+                        # Background sender for this URL
+                        async def url_event_sender():
+                            pages_visited = 0
+                            images_found = 0
+                            while True:
+                                event, edata = await queue.get()
+                                if event is None:
+                                    queue.task_done()
+                                    break
+
+                                fe_event = _EVENT_MAP.get(event, event)
+
+                                if event == "page_parsed":
+                                    pages_visited += 1
+                                    images_found += edata.get("images", 0)
+                                    edata["pages_visited"] = pages_visited
+                                    edata["images_found"] = images_found
+
+                                if event == "crawl_done" and "result" in edata:
+                                    r = edata["result"]
+                                    edata = {
+                                        "result": {
+                                            "start_url": r.start_url,
+                                            "pages_visited": r.pages_visited,
+                                            "images_found": r.images_found,
+                                            "images_downloaded": r.images_downloaded,
+                                            "images_failed": r.images_failed,
+                                            "total_bytes": r.total_bytes,
+                                            "elapsed_seconds": r.elapsed_seconds,
+                                            "errors": r.errors,
+                                            "summary": r.summary(),
+                                        }
                                     }
-                                }
 
-                            # Add batch context
-                            edata["batch_index"] = idx
-                            edata["batch_url"] = url
+                                # Add batch context
+                                edata["batch_index"] = idx
+                                edata["batch_url"] = url
+
+                                try:
+                                    await websocket.send_json({"event": fe_event, "data": edata})
+                                except Exception:
+                                    break
+                                finally:
+                                    queue.task_done()
+
+                        sender_task = asyncio.create_task(url_event_sender())
+
+                        # Run the crawl with per-URL timeout (120s)
+                        try:
+                            pipeline = CrawlPipeline(config, on_progress=on_progress, backup_proxies=backup_proxies)
+                            crawl_result = await asyncio.wait_for(pipeline.run(), timeout=120.0)
+
+                            url_result = {
+                                "url": url,
+                                "status": "success",
+                                "pages_visited": crawl_result.pages_visited,
+                                "images_found": crawl_result.images_found,
+                                "images_downloaded": crawl_result.images_downloaded,
+                                "images_failed": crawl_result.images_failed,
+                                "total_bytes": crawl_result.total_bytes,
+                                "elapsed_seconds": crawl_result.elapsed_seconds,
+                                "output_folder": str(domain_folder),
+                            }
+                            results[idx] = url_result
+                            success_count += 1
 
                             try:
-                                await websocket.send_json({"event": fe_event, "data": edata})
+                                await websocket.send_json({
+                                    "event": "batch_url_done",
+                                    "data": {"index": idx, "url": url, "result": url_result}
+                                })
                             except Exception:
-                                break
-                            finally:
-                                queue.task_done()
+                                pass
 
-                    sender_task = asyncio.create_task(url_event_sender())
+                        except asyncio.TimeoutError:
+                            err_msg = f"Timeout (120s) khi crawl {url}"
+                            logger.warning(err_msg)
+                            results[idx] = {"url": url, "status": "timeout", "error": err_msg}
+                            failed_count += 1
+                            try:
+                                await websocket.send_json({
+                                    "event": "batch_url_error",
+                                    "data": {"index": idx, "url": url, "error": err_msg}
+                                })
+                            except Exception:
+                                pass
 
-                    # Run the crawl with per-URL timeout (120s)
-                    try:
-                        pipeline = CrawlPipeline(config, on_progress=on_progress, backup_proxies=backup_proxies)
-                        crawl_result = await asyncio.wait_for(pipeline.run(), timeout=120.0)
+                        except Exception as e:
+                            err_msg = f"Lỗi crawl {url}: {e}"
+                            logger.error(err_msg)
+                            results[idx] = {"url": url, "status": "error", "error": str(e)}
+                            failed_count += 1
+                            try:
+                                await websocket.send_json({
+                                    "event": "batch_url_error",
+                                    "data": {"index": idx, "url": url, "error": str(e)}
+                                })
+                            except Exception:
+                                pass
 
-                        url_result = {
-                            "url": url,
-                            "status": "success",
-                            "pages_visited": crawl_result.pages_visited,
-                            "images_found": crawl_result.images_found,
-                            "images_downloaded": crawl_result.images_downloaded,
-                            "images_failed": crawl_result.images_failed,
-                            "total_bytes": crawl_result.total_bytes,
-                            "elapsed_seconds": crawl_result.elapsed_seconds,
-                            "output_folder": str(domain_folder),
-                        }
-                        results[idx] = url_result
-                        success_count += 1
+                        finally:
+                            # Signal sender to exit
+                            await queue.put((None, None))
+                            await sender_task
 
-                        try:
-                            await websocket.send_json({
-                                "event": "batch_url_done",
-                                "data": {"index": idx, "url": url, "result": url_result}
-                            })
-                        except Exception:
-                            pass
-
-                    except asyncio.TimeoutError:
-                        err_msg = f"Timeout (120s) khi crawl {url}"
-                        logger.warning(err_msg)
-                        results[idx] = {"url": url, "status": "timeout", "error": err_msg}
-                        failed_count += 1
-                        try:
-                            await websocket.send_json({
-                                "event": "batch_url_error",
-                                "data": {"index": idx, "url": url, "error": err_msg}
-                            })
-                        except Exception:
-                            pass
-
-                    except Exception as e:
-                        err_msg = f"Lỗi crawl {url}: {e}"
-                        logger.error(err_msg)
-                        results[idx] = {"url": url, "status": "error", "error": str(e)}
-                        failed_count += 1
-                        try:
-                            await websocket.send_json({
-                                "event": "batch_url_error",
-                                "data": {"index": idx, "url": url, "error": str(e)}
-                            })
-                        except Exception:
-                            pass
-
-                    finally:
-                        # Signal sender to exit
-                        await queue.put((None, None))
-                        await sender_task
-
-                    # Delay between URLs in same domain (politeness)
-                    if url_list[-1] != (idx, url):  # not last URL
-                        await asyncio.sleep(2.0)
+                        # Delay between URLs in same domain (politeness)
+                        if url_list[-1] != (idx, url):  # not last URL
+                            await asyncio.sleep(2.0)
 
             # Launch all domain groups concurrently (limited by semaphore)
             domain_tasks = [

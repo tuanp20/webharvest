@@ -12,12 +12,11 @@ import random
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
+from typing import Any, Dict, List, Optional, Sequence
 
 import requests
 from requests.adapters import HTTPAdapter
 from tenacity import (
-    RetryError,
     retry,
     retry_if_exception_type,
     stop_after_attempt,
@@ -387,6 +386,8 @@ class BaseFetcher:
         *,
         headers: Optional[Dict[str, str]] = None,
         data: Optional[Any] = None,
+        json: Optional[Any] = None,
+        params: Optional[Dict[str, str]] = None,
         timeout: Optional[int] = None,
         follow_redirects: bool = True,
     ) -> FetchResponse:
@@ -420,6 +421,10 @@ class BaseFetcher:
             }
             if data is not None:
                 kwargs["data"] = data
+            if json is not None:
+                kwargs["json"] = json
+            if params is not None:
+                kwargs["params"] = params
             if proxy_map:
                 kwargs["proxies"] = proxy_map
             return curl_requests.request(**kwargs)

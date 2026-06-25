@@ -100,7 +100,6 @@ class JsonLdProductParser:
                     except (ValueError, TypeError):
                         pass
 
-                curr = offer.get("priceCurrency") or "USD"
                 sku = offer.get("sku")
                 avail = offer.get("availability")
                 in_stock = True

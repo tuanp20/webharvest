@@ -22,7 +22,6 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
-import json
 import logging
 import re
 import time
@@ -140,7 +139,7 @@ class CrawlResult:
     def summary(self) -> str:
         """Human-readable summary."""
         lines = [
-            f"WebHarvest Crawl Result",
+            "WebHarvest Crawl Result",
             f"  URL:            {self.start_url}",
             f"  Pages visited:  {self.pages_visited}",
             f"  Images found:   {self.images_found}",
@@ -737,7 +736,6 @@ class CrawlPipeline:
     async def _crawl_gallery(self, result: CrawlResult):
         """Follow next-page links for gallery/album sites."""
         current_url: Optional[str] = self.config.url
-        selectors = self.config.pagination_selectors or _PAGINATION_SELECTORS
         all_images: List[ImageInfo] = []
         pages_without_images = 0
 
@@ -997,7 +995,6 @@ class CrawlPipeline:
                     return
                 # Reserve the slot before releasing the lock
                 result.images_downloaded += 1
-            slot_reserved = True
 
             for attempt in range(self.config.retry_count):
                 try:

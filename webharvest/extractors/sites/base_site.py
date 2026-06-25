@@ -11,7 +11,7 @@ from abc import ABC, abstractmethod
 from typing import Optional
 from urllib.parse import urljoin
 
-from bs4 import BeautifulSoup, Tag
+from bs4 import BeautifulSoup
 
 from webharvest.models import ProductData, ProductVariant
 
@@ -45,6 +45,10 @@ class BaseSiteExtractor(ABC):
     def extract_listing(self, html: str, url: str) -> list[str]:
         """Extracts product page URLs from a catalog or category listing page HTML."""
         pass
+
+    def is_product_url(self, url: str) -> bool:
+        """Determines if a URL is a product detail page (as opposed to a listing page)."""
+        return False
 
     # ------------------------------------------------------------------
     # Common extraction helpers — used by all site extractors

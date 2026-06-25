@@ -12,7 +12,6 @@ Output:
 
 from __future__ import annotations
 
-import os
 import platform
 import shutil
 import subprocess
@@ -43,13 +42,21 @@ def _ensure_deps() -> None:
 
 def _get_icon_path() -> str | None:
     """Return the path to the app icon, or None if not present."""
+    system = platform.system()
+    if system == "Windows":
+        preferred_exts = (".ico", ".png")
+    elif system == "Darwin":
+        preferred_exts = (".icns", ".png")
+    else:
+        preferred_exts = (".png", ".ico")
+
     # Check logo_assets first (preferred location)
-    for ext in (".icns", ".ico", ".png"):
+    for ext in preferred_exts:
         p = ROOT / "logo_assets" / f"icon{ext}"
         if p.exists():
             return str(p)
     # Fallback to static directory
-    for ext in (".ico", ".icns", ".png"):
+    for ext in preferred_exts:
         p = ROOT / "webharvest" / "static" / f"icon{ext}"
         if p.exists():
             return str(p)
@@ -125,6 +132,19 @@ def build(onefile: bool = False) -> None:
         # --- HTML parser ---
         "selectolax",
         "selectolax.parser",
+        # --- HTML / XML parsers ---
+        "bs4",
+        "lxml",
+        # --- Excel ---
+        "openpyxl",
+        "et_xmlfile",
+        # --- Environment ---
+        "dotenv",
+        # --- Playwright ---
+        "playwright",
+        "playwright.sync_api",
+        "playwright._impl",
+        "pyee",
         # --- Async frameworks ---
         "anyio",
         "anyio._backends",
@@ -171,6 +191,11 @@ def build(onefile: bool = False) -> None:
         "webview",
         "clr",
         "pythonnet",
+        "playwright",
+        "pyee",
+        "openpyxl",
+        "lxml",
+        "bs4",
     ]
 
     # --- Collect data files ---

@@ -15,7 +15,6 @@ import os
 import platform
 import socket
 import sys
-import tempfile
 import threading
 import time
 import traceback

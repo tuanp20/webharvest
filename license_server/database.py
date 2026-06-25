@@ -156,6 +156,16 @@ async def init_db(database_url: str) -> None:
                 await conn.execute("ALTER TABLE license_keys DROP CONSTRAINT IF EXISTS license_keys_duration_months_check")
                 await conn.execute("ALTER TABLE license_keys ADD CONSTRAINT license_keys_duration_months_check CHECK (duration_months IN (0,1,3,6,12))")
                 await conn.execute("CREATE INDEX IF NOT EXISTS idx_keys_device_tier ON license_keys(device_id, tier)")
+                
+                # Migrations for missing columns in existing tables
+                await conn.execute("ALTER TABLE license_keys ADD COLUMN IF NOT EXISTS total_requests INTEGER DEFAULT 0")
+                await conn.execute("ALTER TABLE license_keys ADD COLUMN IF NOT EXISTS total_urls INTEGER DEFAULT 0")
+                await conn.execute("ALTER TABLE license_keys ADD COLUMN IF NOT EXISTS note TEXT")
+                await conn.execute("ALTER TABLE license_keys ADD COLUMN IF NOT EXISTS payos_tx_id VARCHAR(100)")
+                await conn.execute("ALTER TABLE daily_usage ADD COLUMN IF NOT EXISTS requests_count INTEGER DEFAULT 0")
+                await conn.execute("ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS payos_tx_id VARCHAR(100)")
+                await conn.execute("ALTER TABLE payment_transactions ADD COLUMN IF NOT EXISTS webhook_payload JSONB")
+                
                 logger.info("Database migrations applied successfully")
             except Exception as migration_error:
                 logger.warning("Database migrations warning: %s", migration_error)
@@ -463,7 +473,7 @@ async def validate_key(key: str, device_id: str) -> dict | None:
         # Trial keys: check total URL quota exhausted
         if row["tier"] == "trial":
             from .config import TRIAL_MAX_URLS
-            if (row.get("total_urls", 0) or 0) >= TRIAL_MAX_URLS:
+            if (row["total_urls"] or 0) >= TRIAL_MAX_URLS:
                 return None  # TRIAL_EXHAUSTED
 
         await conn.execute(

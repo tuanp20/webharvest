@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 from typing import Optional
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urljoin
 from bs4 import BeautifulSoup
 from webharvest.models import ProductData
 from webharvest.extractors.json_parsers.json_ld import JsonLdProductParser
@@ -85,8 +85,6 @@ class WooCommerceExtractor(BaseSiteExtractor):
     def extract_listing(self, html: str, url: str) -> list[str]:
         soup = BeautifulSoup(html, "lxml")
         links = []
-        parsed = urlparse(url)
-        base_url = f"{parsed.scheme}://{parsed.netloc}"
         
         # WooCommerce standard list selectors (.product a, .woocommerce-loop-product__link)
         for a in soup.find_all("a", class_=re.compile(r"woocommerce-LoopProduct-link|product__link", re.I)):

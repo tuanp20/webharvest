@@ -66,3 +66,12 @@ webharvest_settings.json
 quick_test/
 test_mac_debug/
 
+# Model scratch & temp output folders
+scratch/
+output_aliexpress_pipeline_test/
+output_aliexpress_test/
+output_test_etsy/
+output_test_etsy_pipeline/
+output_test_real/
+
+

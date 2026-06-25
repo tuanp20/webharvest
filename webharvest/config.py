@@ -6,7 +6,6 @@ Inspired by gallery-dl's config system: everything tuneable in one place.
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path

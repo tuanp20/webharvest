@@ -43,16 +43,16 @@ class ProgressDisplay:
                 print(f"  [OK] Parsed: {data['url']} — {data['images']} images, {data['links']} links")
 
         elif event == "js_detected":
-            print(f"  [JS] JS content detected, upgrading to dynamic fetcher")
+            print("  [JS] JS content detected, upgrading to dynamic fetcher")
 
         elif event == "antibot_detected":
-            print(f"  [STEALTH] Anti-bot detected, upgrading to stealth fetcher")
+            print("  [STEALTH] Anti-bot detected, upgrading to stealth fetcher")
 
         elif event == "next_page":
             print(f"  [PAGINATION] Following pagination: {data['url']}")
 
         elif event == "gallery_empty":
-            print(f"  [INFO] No more images found, stopping pagination")
+            print("  [INFO] No more images found, stopping pagination")
 
         elif event == "download_start":
             print(f"[DOWNLOAD] Downloading {data['count']} images...")

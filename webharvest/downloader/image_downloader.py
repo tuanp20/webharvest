@@ -13,7 +13,7 @@ import asyncio
 import hashlib
 import logging
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 from urllib.parse import urlparse, unquote
 
 import aiohttp
