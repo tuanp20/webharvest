@@ -335,124 +335,132 @@ class ValidateRequest(BaseModel):
 
 @app.post("/api/license/validate")
 async def validate_license(req: ValidateRequest, request: Request):
-    # Rate limit: 120 validation requests per minute per IP
-    client_ip = _get_client_ip(request)
-    if not _rate_limiter.is_allowed(f"validate:{client_ip}", max_requests=120, window_seconds=60):
-        raise HTTPException(status_code=429, detail={"error_code": "RATE_LIMITED", "message": "Too many requests"})
+    try:
+        # Rate limit: 120 validation requests per minute per IP
+        client_ip = _get_client_ip(request)
+        if not _rate_limiter.is_allowed(f"validate:{client_ip}", max_requests=120, window_seconds=60):
+            raise HTTPException(status_code=429, detail={"error_code": "RATE_LIMITED", "message": "Too many requests"})
 
-    if not is_valid_key_format(req.key):
-        return JSONResponse(status_code=400, content=ValidationResult(
-            valid=False, error="Invalid key format", error_code="INVALID_FORMAT"
-        ).to_dict())
-
-    key_row = await db.validate_key(req.key, req.device_id)
-    if not key_row:
-        existing = await db.get_key_by_key(req.key)
-        error_code = "NOT_FOUND"
-        error_msg = "Key not found"
-        key_id = None
-        if existing:
-            key_id = existing["id"]
-            if existing["status"] == "expired":
-                error_code, error_msg = "EXPIRED", "Key has expired"
-            elif existing["status"] == "revoked":
-                error_code, error_msg = "REVOKED", "Key has been revoked"
-            elif existing["device_id"] and existing["device_id"] != req.device_id:
-                error_code, error_msg = "DEVICE_MISMATCH", "Key is bound to another device"
-
-        await db.log_request(key_id=key_id, action=req.action, url=req.url, status="error",
-                             error_message=error_msg, ip_address=_get_client_ip(request), device_id=req.device_id)
-        return JSONResponse(status_code=403, content=ValidationResult(
-            valid=False, error=error_msg, error_code=error_code
-        ).to_dict())
-
-    tier_cfg = get_tier_config(key_row["tier"])
-    is_trial = key_row["tier"] == "trial"
-
-    # Trial-specific checks: exhausted or expired
-    if is_trial:
-        total_urls = key_row.get("total_urls", 0)
-
-        # Check if trial time-expired (belt-and-suspenders with DB check)
-        if key_row.get("expires_at") and key_row["expires_at"] < datetime.now(timezone.utc):
-            await db.log_request(key_id=key_row["id"], action=req.action, url=req.url, status="error",
-                                 error_message="Trial expired",
-                                 ip_address=_get_client_ip(request), device_id=req.device_id)
-            return JSONResponse(status_code=403, content=ValidationResult(
-                valid=False, error="Trial period has expired",
-                error_code="TRIAL_EXPIRED", tier="trial",
-                is_trial=True, trial_remaining=0, trial_total=TRIAL_MAX_URLS,
+        if not is_valid_key_format(req.key):
+            return JSONResponse(status_code=400, content=ValidationResult(
+                valid=False, error="Invalid key format", error_code="INVALID_FORMAT"
             ).to_dict())
 
-        # Check if trial URL quota exhausted
-        if total_urls >= TRIAL_MAX_URLS:
-            await db.log_request(key_id=key_row["id"], action=req.action, url=req.url, status="error",
-                                 error_message=f"Trial exhausted ({total_urls}/{TRIAL_MAX_URLS})",
-                                 ip_address=_get_client_ip(request), device_id=req.device_id)
+        key_row = await db.validate_key(req.key, req.device_id)
+        if not key_row:
+            existing = await db.get_key_by_key(req.key)
+            error_code = "NOT_FOUND"
+            error_msg = "Key not found"
+            key_id = None
+            if existing:
+                key_id = existing["id"]
+                if existing["status"] == "expired":
+                    error_code, error_msg = "EXPIRED", "Key has expired"
+                elif existing["status"] == "revoked":
+                    error_code, error_msg = "REVOKED", "Key has been revoked"
+                elif existing["device_id"] and existing["device_id"] != req.device_id:
+                    error_code, error_msg = "DEVICE_MISMATCH", "Key is bound to another device"
+
+            await db.log_request(key_id=key_id, action=req.action, url=req.url, status="error",
+                                 error_message=error_msg, ip_address=_get_client_ip(request), device_id=req.device_id)
             return JSONResponse(status_code=403, content=ValidationResult(
-                valid=False, error=f"Trial URL limit reached ({total_urls}/{TRIAL_MAX_URLS})",
-                error_code="TRIAL_EXHAUSTED", tier="trial",
-                is_trial=True, trial_remaining=0, trial_total=TRIAL_MAX_URLS,
+                valid=False, error=error_msg, error_code=error_code
             ).to_dict())
 
-    # Check daily limit
-    daily_used = await db.get_daily_usage(key_row["id"])
-    max_daily = tier_cfg.max_daily_urls if tier_cfg else 50
+        tier_cfg = get_tier_config(key_row["tier"])
+        is_trial = key_row["tier"] == "trial"
 
-    if req.action in ("crawl", "batch_crawl") and daily_used >= max_daily:
-        await db.log_request(key_id=key_row["id"], action=req.action, url=req.url, status="rate_limited",
-                             error_message=f"Daily limit reached ({daily_used}/{max_daily})",
-                             ip_address=_get_client_ip(request), device_id=req.device_id)
-        return JSONResponse(status_code=429, content=ValidationResult(
-            valid=False, error=f"Daily URL limit reached ({daily_used}/{max_daily})",
-            error_code="RATE_LIMITED", tier=key_row["tier"],
-            daily_urls_used=daily_used, daily_urls_remaining=0,
-            is_trial=is_trial,
-            trial_remaining=max(0, TRIAL_MAX_URLS - key_row.get("total_urls", 0)) if is_trial else 0,
-            trial_total=TRIAL_MAX_URLS if is_trial else 0,
-        ).to_dict())
+        # Trial-specific checks: exhausted or expired
+        if is_trial:
+            total_urls = key_row.get("total_urls", 0)
 
-    # Check batch_crawl permission
-    if req.action == "batch_crawl" and tier_cfg and not tier_cfg.batch_crawl:
-        await db.log_request(key_id=key_row["id"], action=req.action, url=req.url, status="error",
-                             error_message="Batch crawl not available for this tier",
-                             ip_address=_get_client_ip(request), device_id=req.device_id)
-        return JSONResponse(status_code=403, content=ValidationResult(
-            valid=False, error="Batch crawl requires Pro or Unlimited tier",
-            error_code="TIER_RESTRICTED", tier=key_row["tier"],
-        ).to_dict())
+            # Check if trial time-expired (belt-and-suspenders with DB check)
+            if key_row.get("expires_at") and key_row["expires_at"] < datetime.now(timezone.utc):
+                await db.log_request(key_id=key_row["id"], action=req.action, url=req.url, status="error",
+                                     error_message="Trial expired",
+                                     ip_address=_get_client_ip(request), device_id=req.device_id)
+                return JSONResponse(status_code=403, content=ValidationResult(
+                    valid=False, error="Trial period has expired",
+                    error_code="TRIAL_EXPIRED", tier="trial",
+                    is_trial=True, trial_remaining=0, trial_total=TRIAL_MAX_URLS,
+                ).to_dict())
 
-    # Increment usage if it's a crawl action
-    if req.action in ("crawl", "batch_crawl"):
-        await db.increment_daily_usage(key_row["id"], urls=1)
+            # Check if trial URL quota exhausted
+            if total_urls >= TRIAL_MAX_URLS:
+                await db.log_request(key_id=key_row["id"], action=req.action, url=req.url, status="error",
+                                     error_message=f"Trial exhausted ({total_urls}/{TRIAL_MAX_URLS})",
+                                     ip_address=_get_client_ip(request), device_id=req.device_id)
+                return JSONResponse(status_code=403, content=ValidationResult(
+                    valid=False, error=f"Trial URL limit reached ({total_urls}/{TRIAL_MAX_URLS})",
+                    error_code="TRIAL_EXHAUSTED", tier="trial",
+                    is_trial=True, trial_remaining=0, trial_total=TRIAL_MAX_URLS,
+                ).to_dict())
 
-    await db.log_request(key_id=key_row["id"], action=req.action, url=req.url, status="success",
-                         ip_address=_get_client_ip(request), device_id=req.device_id)
+        # Check daily limit
+        daily_used = await db.get_daily_usage(key_row["id"])
+        max_daily = tier_cfg.max_daily_urls if tier_cfg else 50
 
-    # Recalculate trial remaining after potential increment
-    trial_remaining_final = 0
-    if is_trial:
-        current_total = key_row.get("total_urls", 0)
+        if req.action in ("crawl", "batch_crawl") and daily_used >= max_daily:
+            await db.log_request(key_id=key_row["id"], action=req.action, url=req.url, status="rate_limited",
+                                 error_message=f"Daily limit reached ({daily_used}/{max_daily})",
+                                 ip_address=_get_client_ip(request), device_id=req.device_id)
+            return JSONResponse(status_code=429, content=ValidationResult(
+                valid=False, error=f"Daily URL limit reached ({daily_used}/{max_daily})",
+                error_code="RATE_LIMITED", tier=key_row["tier"],
+                daily_urls_used=daily_used, daily_urls_remaining=0,
+                is_trial=is_trial,
+                trial_remaining=max(0, TRIAL_MAX_URLS - key_row.get("total_urls", 0)) if is_trial else 0,
+                trial_total=TRIAL_MAX_URLS if is_trial else 0,
+            ).to_dict())
+
+        # Check batch_crawl permission
+        if req.action == "batch_crawl" and tier_cfg and not tier_cfg.batch_crawl:
+            await db.log_request(key_id=key_row["id"], action=req.action, url=req.url, status="error",
+                                 error_message="Batch crawl not available for this tier",
+                                 ip_address=_get_client_ip(request), device_id=req.device_id)
+            return JSONResponse(status_code=403, content=ValidationResult(
+                valid=False, error="Batch crawl requires Pro or Unlimited tier",
+                error_code="TIER_RESTRICTED", tier=key_row["tier"],
+            ).to_dict())
+
+        # Increment usage if it's a crawl action
         if req.action in ("crawl", "batch_crawl"):
-            current_total += 1  # Account for the increment we just did
-        trial_remaining_final = max(0, TRIAL_MAX_URLS - current_total)
+            await db.increment_daily_usage(key_row["id"], urls=1)
 
-    return ValidationResult(
-        valid=True, tier=key_row["tier"],
-        tier_name=tier_cfg.name if tier_cfg else key_row["tier"],
-        expires_at=key_row["expires_at"].isoformat() if key_row.get("expires_at") else None,
-        max_daily_urls=max_daily,
-        max_concurrent=tier_cfg.max_concurrent if tier_cfg else 1,
-        batch_crawl=tier_cfg.batch_crawl if tier_cfg else False,
-        stealth_mode=tier_cfg.stealth_mode if tier_cfg else False,
-        proxy_quota_gb=tier_cfg.proxy_quota_gb if tier_cfg else 0,
-        allowed_fetchers=tier_cfg.allowed_fetchers if tier_cfg else ["static"],
-        daily_urls_used=daily_used,
-        daily_urls_remaining=max(0, max_daily - daily_used),
-        is_trial=is_trial,
-        trial_remaining=trial_remaining_final,
-        trial_total=TRIAL_MAX_URLS if is_trial else 0,
-    ).to_dict()
+        await db.log_request(key_id=key_row["id"], action=req.action, url=req.url, status="success",
+                             ip_address=_get_client_ip(request), device_id=req.device_id)
+
+        # Recalculate trial remaining after potential increment
+        trial_remaining_final = 0
+        if is_trial:
+            current_total = key_row.get("total_urls", 0)
+            if req.action in ("crawl", "batch_crawl"):
+                current_total += 1  # Account for the increment we just did
+            trial_remaining_final = max(0, TRIAL_MAX_URLS - current_total)
+
+        return ValidationResult(
+            valid=True, tier=key_row["tier"],
+            tier_name=tier_cfg.name if tier_cfg else key_row["tier"],
+            expires_at=key_row["expires_at"].isoformat() if key_row.get("expires_at") else None,
+            max_daily_urls=max_daily,
+            max_concurrent=tier_cfg.max_concurrent if tier_cfg else 1,
+            batch_crawl=tier_cfg.batch_crawl if tier_cfg else False,
+            stealth_mode=tier_cfg.stealth_mode if tier_cfg else False,
+            proxy_quota_gb=tier_cfg.proxy_quota_gb if tier_cfg else 0,
+            allowed_fetchers=tier_cfg.allowed_fetchers if tier_cfg else ["static"],
+            daily_urls_used=daily_used,
+            daily_urls_remaining=max(0, max_daily - daily_used),
+            is_trial=is_trial,
+            trial_remaining=trial_remaining_final,
+            trial_total=TRIAL_MAX_URLS if is_trial else 0,
+        ).to_dict()
+    except Exception as e:
+        import traceback
+        logger.exception("Error in validate_license")
+        return JSONResponse(status_code=500, content={
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        })
 
 
 # ── License Info ──────────────────────────────────────────────────────────
