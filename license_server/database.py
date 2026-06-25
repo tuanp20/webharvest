@@ -223,7 +223,20 @@ def _setup_mock_data():
     _mock_keys[3] = k3
     _mock_key_by_str[k3["key"]] = k3
 
-    _key_id_seq = 4
+    # Trial key for testing
+    k_trial = {
+        "id": 4, "key": "WH-E3WAW-R4F9E-BVXZ2-X3K5Y", "tier": "trial", "duration_months": 0,
+        "status": "active", "amount_vnd": 0, "owner_email": "trial@webharvest.vn", "owner_name": "Trial User",
+        "device_id": "fbb3c01ff3feea372417e9d826707265227faeaaddec153a71e2908cc4353364", "device_name": "Windows PC", "rebind_count": 0,
+        "created_at": now - timedelta(days=1), "activated_at": now - timedelta(days=1),
+        "expires_at": now + timedelta(days=6), "last_validated": now,
+        "order_code": 10004, "payos_tx_id": "tx_trial", "total_requests": 5, "total_urls": 10,
+        "note": "Our trial key",
+    }
+    _mock_keys[4] = k_trial
+    _mock_key_by_str[k_trial["key"]] = k_trial
+
+    _key_id_seq = 5
 
     # Seed mock transactions
     _mock_tx[10001] = {
