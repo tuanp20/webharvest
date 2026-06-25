@@ -701,25 +701,33 @@ async def auto_expire_keys() -> int:
 async def get_daily_usage(key_id: int, date: str = None) -> int:
     global is_mock
     if date is None:
-        date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        date_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    else:
+        date_str = date
 
     if is_mock:
-        return _mock_daily_usage.get(f"{key_id}:{date}", 0)
+        return _mock_daily_usage.get(f"{key_id}:{date_str}", 0)
+
+    try:
+        date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+    except ValueError:
+        date_obj = datetime.now(timezone.utc).date()
 
     async with pool.acquire() as conn:
         val = await conn.fetchval(
             "SELECT urls_crawled FROM daily_usage WHERE key_id=$1 AND date=$2",
-            key_id, date,
+            key_id, date_obj,
         )
         return val or 0
 
 
 async def increment_daily_usage(key_id: int, urls: int = 1) -> int:
     global is_mock
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today_obj = datetime.now(timezone.utc).date()
+    today_str = today_obj.strftime("%Y-%m-%d")
 
     if is_mock:
-        ck = f"{key_id}:{today}"
+        ck = f"{key_id}:{today_str}"
         current = _mock_daily_usage.get(ck, 0)
         _mock_daily_usage[ck] = current + urls
         # Increment total urls on key
@@ -741,7 +749,7 @@ async def increment_daily_usage(key_id: int, urls: int = 1) -> int:
                DO UPDATE SET urls_crawled = daily_usage.urls_crawled + $3,
                              requests_count = daily_usage.requests_count + 1
                RETURNING urls_crawled""",
-            key_id, today, urls,
+            key_id, today_obj, urls,
         )
         return row["urls_crawled"]
 
@@ -749,10 +757,11 @@ async def increment_daily_usage(key_id: int, urls: int = 1) -> int:
 async def check_and_increment_daily_usage(key_id: int, daily_limit: int) -> int | None:
     """Atomically check and increment daily usage. Returns new count or None if limit exceeded."""
     global is_mock
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today_obj = datetime.now(timezone.utc).date()
+    today_str = today_obj.strftime("%Y-%m-%d")
 
     if is_mock:
-        ck = f"{key_id}:{today}"
+        ck = f"{key_id}:{today_str}"
         current = _mock_daily_usage.get(ck, 0)
         if current >= daily_limit:
             return None
@@ -772,7 +781,7 @@ async def check_and_increment_daily_usage(key_id: int, daily_limit: int) -> int 
                           requests_count = daily_usage.requests_count + 1
             WHERE daily_usage.urls_crawled < $3
             RETURNING urls_crawled
-        """, key_id, today, daily_limit)
+        """, key_id, today_obj, daily_limit)
         if result:
             # Also increment total urls on the key
             await conn.execute(
